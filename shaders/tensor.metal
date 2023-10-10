@@ -9,14 +9,6 @@ kernel void mul_v_f32 (device const float* inA,
     result[index] = inA[index] * inB[index];
 }
 
-kernel void mul_v_f64 (device const double* inA,
-                           device const double* inB,
-                           device double* result,
-                           uint index [[thread_position_in_grid]])
-{
-    result[index] = inA[index] * inB[index];
-}
-
 kernel void mul_v_i32 (device const int* inA,
                            device const int* inB,
                            device int* result,

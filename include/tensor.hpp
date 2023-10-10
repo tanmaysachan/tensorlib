@@ -1,16 +1,11 @@
 #pragma once
 
-#define NS_PRIVATE_IMPLEMENTATION
-#define CA_PRIVATE_IMPLEMENTATION
-#define MTL_PRIVATE_IMPLEMENTATION
-#include <Metal.hpp>
-
 #include <vector>
 #include <functional>
 #include <iostream>
 
 #ifdef RUN_METAL
-#include "tensor-metal.hpp"
+#include "tensor_metal.hpp"
 #endif
 
 namespace tensorlib {

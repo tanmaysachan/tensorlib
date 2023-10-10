@@ -1,5 +1,3 @@
-#include "tensor.hpp"
-
 #include <iostream>
 #include <cassert>
 #include <numeric>
