@@ -9,6 +9,7 @@ int main() {
     std::vector<int> data = {1, 2, 3, 4, 5, 6};
     std::vector<int> shape = {2, 3};
     Tensor<int> t(data, shape);
+    t.to("gpu");
     std::cout << t << std::endl;
 
     std::vector<int> data2 = {5, 6, 7, 8, 10, 11};
@@ -21,35 +22,31 @@ int main() {
     std::cout << t << std::endl;
     std::cout << t2 << std::endl;
 
+    std::cout << t.tuid << std::endl;
+    std::cout << t2.tuid << std::endl;
+    std::cout << t3.tuid << std::endl;
+
+    /* std:: cout << metal_interface<int> << std::endl; */
+
 #ifdef RUN_METAL
-    NS::AutoreleasePool* pPool   = NS::AutoreleasePool::alloc()->init();
-    MTL::Device* pDevice = MTL::CreateSystemDefaultDevice();
+    /* TensorMetalWrapper<int>* computer = new TensorMetalWrapper<int>(); */
+    /* // Create buffers to hold data */
+    /* computer->prepareData(); */
     
-    // Create the custom object used to encapsulate the Metal code.
-    // Initializes objects to communicate with the GPU.
-    TensorMetalWrapper* computer = new TensorMetalWrapper();
-    computer->initDevice(pDevice);
+    /* // Time the compute phase. */
+    /* auto start = std::chrono::steady_clock::now(); */
     
-    // Create buffers to hold data
-    computer->prepareData();
+    /* // Send a command to the GPU to perform the calculation. */
+    /* computer->sendComputeCommand(); */
     
-    // Time the compute phase.
-    auto start = std::chrono::steady_clock::now();
+    /* // End of compute phase. */
+    /* auto end = std::chrono::steady_clock::now(); */
+    /* auto delta_time = end - start; */
     
-    // Send a command to the GPU to perform the calculation.
-    computer->sendComputeCommand();
-    
-    // End of compute phase.
-    auto end = std::chrono::steady_clock::now();
-    auto delta_time = end - start;
-    
-    pPool->release();
-    
-    std::cout << "Computation completed in "
-            << std::chrono::duration <double, std::milli> (delta_time).count()
-            << " ms for array of size "
-            << ARRAY_LENGTH
-            <<".\n";
-    
+    /* std::cout << "Computation completed in " */
+    /*         << std::chrono::duration <double, std::milli> (delta_time).count() */
+    /*         << " ms for array of size " */
+    /*         << ARRAY_LENGTH */
+    /*         <<".\n"; */
 #endif
 }

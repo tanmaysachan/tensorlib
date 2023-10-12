@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// Parallel vector multiplications
 kernel void mul_v_f32 (device const float* inA,
                            device const float* inB,
                            device float* result,

@@ -2,3 +2,4 @@ build/
 *.h
 *.metallib
 *.o
+main

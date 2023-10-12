@@ -6,22 +6,35 @@
 
 #include <Metal.hpp>
 
-const unsigned long int ARRAY_LENGTH = 100000000;
-const unsigned long int BUFFER_SIZE = ARRAY_LENGTH * sizeof(int);
+#include <map>
+#include <memory>
 
+const int ARRAY_LENGTH = 1024;
+const int BUFFER_SIZE = 1024;
+
+template <typename T>
 class TensorMetalWrapper {
 public:
-    TensorMetalWrapper();
+    MTL::Device* device;
+    NS::AutoreleasePool* pool;
 
-    MTL::Device* mDevice;
-    MTL::ComputePipelineState* mComputeFunction;
-    MTL::CommandQueue* mCommandQueue;
+    TensorMetalWrapper(MTL::Device* device = nullptr);
+
+    ~TensorMetalWrapper();
+
+    MTL::CommandQueue* command_queue;
+    std::map<std::string, MTL::ComputePipelineState*> compute_functions;
+    std::map<std::string, MTL::CommandBuffer*> command_buffers;
 
     MTL::Buffer* mBufferA;
     MTL::Buffer* mBufferB;
     MTL::Buffer* mBufferResult;
 
-    void initDevice(MTL::Device* device);
+    std::map<std::string, MTL::Buffer*> tensor_buffer_map;
+    void assign(tensorlib::Tensor<T>* const tensor_ptr);
+    void enqueue_kernel(std::string tuid1, std::string tuid2, std::string func);
+
+    void initDevice();
     void prepareData();
     void generateRandomIntData(MTL::Buffer* buffer);
     void sendComputeCommand();
@@ -29,4 +42,6 @@ public:
     void verifyResults();
 };
 
-#include "tensor_metal.ipp"
+// TODO: Unable to separately compile
+// Appending the file as a quickfix, should be .cpp ideally
+#include "tensor_metal.tpp"

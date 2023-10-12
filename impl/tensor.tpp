@@ -55,7 +55,6 @@ tensorlib::Tensor<T>::Tensor(
         requires_grad(requires_grad) {
     assert(this->data.size() ==
            std::accumulate(this->shape.begin(), this->shape.end(), 1, std::multiplies<int>()));
-    this->device = device;
     // infer dtype
     if (dtype == "none") {
         if (std::is_same<T, int>::value ||
@@ -70,45 +69,85 @@ tensorlib::Tensor<T>::Tensor(
         }
     }
     if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
+    // Assign incremental tensor id
+    this->tuid = "Tensor_" + std::to_string(global_tensor_count);
+    global_tensor_count++;
+
+    this->device = device;
+    if (this->device != "cpu") {
+        to(this->device);
+    }
+
+#ifdef RUN_METAL
+    if (!metal_interface<T>)
+        metal_interface<T> = new TensorMetalWrapper<T>();
+#endif
 }
 
 /* Tensor ops */
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator+(const Tensor& other) const {
-    assert(this->shape == other.shape);
+    assert(shape == other.shape);
 #ifdef RUN_METAL
-    
-#else
-    std::vector<T> newdata(this->data.size());
-    std::vector<int> shape = this->shape;
-    for (int i = 0; i < this->data.size(); ++i) {
-        newdata[i] = this->data[i] + other.data[i];
+    // Execute metal kernels if either tensor is on gpu
+    if (this->device == "gpu" || other.device == "gpu") {
+        this->to("gpu");
+        other.to("gpu");
+        metal_interface<T>->enqueue_kernel(this.tuid, other.tuid, "add");
     }
-    return Tensor<T>(newdata, shape, requires_grad);
 #endif
+    std::vector<T> _data(data.size());
+    std::vector<int> _shape = shape;
+    for (int i = 0; i < data.size(); ++i) {
+        _data[i] = data[i] + other.data[i];
+    }
+    return Tensor<T>(_data, _shape, requires_grad);
 }
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator-(const Tensor& other) const {
-    assert(this->shape == other.shape);
-    std::vector<T> newdata(this->data.size());
-    std::vector<int> shape = this->shape;
-    for (int i = 0; i < this->data.size(); ++i) {
-        newdata[i] = this->data[i] - other.data[i];
+    assert(shape == other.shape);
+    std::vector<T> _data(data.size());
+    std::vector<int> _shape = shape;
+    for (int i = 0; i < data.size(); ++i) {
+        _data[i] = data[i] - other.data[i];
     }
-    return Tensor<T>(newdata, shape, requires_grad);
+    return Tensor<T>(_data, _shape, requires_grad);
 }
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator*(const Tensor& other) const {
     // Hadamard product, NOT matmul
-    assert(this->shape == other.shape);
-    std::vector<T> newdata(this->data.size());
-    std::vector<int> shape = this->shape;
-    for (int i = 0; i < this->data.size(); ++i) {
-        newdata[i] = this->data[i] * other.data[i];
+    assert(shape == other.shape);
+    std::vector<T> _data(data.size());
+    std::vector<int> _shape = shape;
+    for (int i = 0; i < data.size(); ++i) {
+        _data[i] = data[i] * other.data[i];
     }
-    return Tensor<T>(newdata, shape, requires_grad);
+    return Tensor<T>(_data, _shape, requires_grad);
+}
+
+/* Tensor utils */
+template <typename T>
+void tensorlib::Tensor<T>::to(const std::string& device) {
+    if (device == this->device) return;
+    if (device != "cpu" && device != "gpu")
+        throw std::runtime_error("device not implemented");
+
+    this->device = device;
+    if (device == "gpu") {
+#ifdef RUN_METAL
+        metal_interface<T>->assign(this);
+#else
+        std::cout << "Selected device \"" << device
+            << "\" not found." << std::endl;
+#endif
+    }
+}
+
+template <typename T>
+long long int tensorlib::Tensor<T>::get_mem_size() {
+    return data.size() * sizeof(T);
 }
 
 } // namespace tensorlib
