@@ -11,5 +11,6 @@ That's it. Tensorlib == tensor library.
 2. Trainable, with 0 dependencies.
 3. Support for acceleration on more hardware.
 
-### Why?
-1. Memes
+### Usage
+1. Make sure metal compiler is installed.
+2. `make`
