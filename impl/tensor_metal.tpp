@@ -38,24 +38,44 @@ TensorMetalWrapper<T>::~TensorMetalWrapper() {
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
+int TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
     // Allot memory, map to tuid, copy data
     std::string tuid = tensor_ptr->tuid;
     long long int mem_reqd = tensor_ptr->get_mem_size();
 
     MTL::Buffer* newbuf = device->newBuffer(mem_reqd, MTL::ResourceStorageModeShared);
+    if (!newbuf) {
+        DBOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
+        return 1;
+    }
     tensor_buffer_map.insert(std::make_pair(tuid, newbuf));
 
-    T* dataPtr = (T*) newbuf->contents();
+    T* data = (T*) newbuf->contents();
     for (unsigned long int index = 0; index < tensor_ptr->data.size(); ++index)
-        dataPtr[index] = tensor_ptr->data[index];
+        data[index] = tensor_ptr->data[index];
 
     DBOUT << "Assigned tensor id \"" << tuid << "\" to device \""
         << tensor_ptr->device << "\"" << std::endl;
+
+    return 0;
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::enqueue_kernel(std::string tuid1, std::string tuid2, std::string func) {
+int TensorMetalWrapper<T>::enqueue_kernel(std::string tuid1, std::string tuid2, std::string func) {
+    MTL::CommandBuffer* command_buf = command_queue->commandBuffer();
+    if (!command_buf) {
+        DBOUT << "Failed to create command buffer on metal gpu" << std::endl;
+        return 1;
+    }
+    MTL::ComputeCommandEncoder* encoder = command_buf->computeCommandEncoder();
+    if (!encoder) {
+        DBOUT << "Failed to create command encoder on metal gpu" << std::endl;
+        return 1;
+    }
+
+    DBOUT << func << std::endl;
+    encoder->endEncoding();
+    return 0;
 }
 
 

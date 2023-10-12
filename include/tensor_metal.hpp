@@ -24,15 +24,18 @@ public:
 
     MTL::CommandQueue* command_queue;
     std::map<std::string, MTL::ComputePipelineState*> compute_functions;
-    std::map<std::string, MTL::CommandBuffer*> command_buffers;
+    /* std::map<std::string, MTL::CommandBuffer*> command_buffers; */
 
     MTL::Buffer* mBufferA;
     MTL::Buffer* mBufferB;
     MTL::Buffer* mBufferResult;
 
     std::map<std::string, MTL::Buffer*> tensor_buffer_map;
-    void assign(tensorlib::Tensor<T>* const tensor_ptr);
-    void enqueue_kernel(std::string tuid1, std::string tuid2, std::string func);
+    int assign(tensorlib::Tensor<T>* const tensor_ptr);
+    // single tensor functions
+    int enqueue_kernel(std::string tuid, std::string func);
+    // two tensor functions
+    int enqueue_kernel(std::string tuid1, std::string tuid2, std::string func);
 
     void initDevice();
     void prepareData();

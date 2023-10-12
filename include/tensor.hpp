@@ -57,10 +57,10 @@ public:
     friend std::ostream& ::operator<<(std::ostream& os, const tensorlib::Tensor<U>& tensor);
 
     /* Tensor ops */
-    Tensor<T> operator+(const Tensor<T>& other) const;
-    Tensor<T> operator-(const Tensor<T>& other) const;
-    Tensor<T> operator*(const Tensor<T>& other) const;
-    Tensor<T> operator/(const Tensor<T>& other) const;
+    Tensor<T> operator+(Tensor<T>& other);
+    Tensor<T> operator-(Tensor<T>& other);
+    Tensor<T> operator*(Tensor<T>& other);
+    Tensor<T> operator/(Tensor<T>& other);
     Tensor<T> operator-() const;
     Tensor<T> operator[](int index) const;
     Tensor<T> operator[](std::vector<int> index) const;

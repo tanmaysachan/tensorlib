@@ -12,12 +12,18 @@ int main() {
     t.to("gpu");
     std::cout << t << std::endl;
 
+    std::vector<float> data1 = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+    std::vector<int> shape1 = {2, 3};
+    Tensor<float> t1(data1, shape1);
+    std::cout << t1 << std::endl;
+
     std::vector<int> data2 = {5, 6, 7, 8, 10, 11};
     std::vector<int> shape2 = {2, 3};
     Tensor<int> t2(data2, shape2);
     std::cout << t2 << std::endl;
 
-    Tensor<int> t3 = t * t2;
+    Tensor<int> t3 = t + t2;
+    Tensor<int> t4 = t * t2;
     std::cout << t3 << std::endl;
     std::cout << t << std::endl;
     std::cout << t2 << std::endl;

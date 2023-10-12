@@ -86,14 +86,19 @@ tensorlib::Tensor<T>::Tensor(
 
 /* Tensor ops */
 template <typename T>
-Tensor<T> tensorlib::Tensor<T>::operator+(const Tensor& other) const {
+Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
     assert(shape == other.shape);
 #ifdef RUN_METAL
     // Execute metal kernels if either tensor is on gpu
     if (this->device == "gpu" || other.device == "gpu") {
         this->to("gpu");
         other.to("gpu");
-        metal_interface<T>->enqueue_kernel(this.tuid, other.tuid, "add");
+        if (metal_interface<T>->enqueue_kernel(this->tuid, other.tuid, "mul_v_i32")) {
+            // On kernel failure, fall back to CPU
+            this->to("cpu");
+            other.to("cpu");
+        }
+        // TODO: return tensor promise, implement tensor promise
     }
 #endif
     std::vector<T> _data(data.size());
@@ -105,7 +110,7 @@ Tensor<T> tensorlib::Tensor<T>::operator+(const Tensor& other) const {
 }
 
 template <typename T>
-Tensor<T> tensorlib::Tensor<T>::operator-(const Tensor& other) const {
+Tensor<T> tensorlib::Tensor<T>::operator-(Tensor& other) {
     assert(shape == other.shape);
     std::vector<T> _data(data.size());
     std::vector<int> _shape = shape;
@@ -116,7 +121,7 @@ Tensor<T> tensorlib::Tensor<T>::operator-(const Tensor& other) const {
 }
 
 template <typename T>
-Tensor<T> tensorlib::Tensor<T>::operator*(const Tensor& other) const {
+Tensor<T> tensorlib::Tensor<T>::operator*(Tensor& other) {
     // Hadamard product, NOT matmul
     assert(shape == other.shape);
     std::vector<T> _data(data.size());
@@ -137,11 +142,16 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
     this->device = device;
     if (device == "gpu") {
 #ifdef RUN_METAL
-        metal_interface<T>->assign(this);
-#else
-        std::cout << "Selected device \"" << device
-            << "\" not found." << std::endl;
+        if (metal_interface<T>->assign(this)) {
+            std::cout << "Selected device \"" << device
+                << "\" not found." << std::endl;
+            std::cout << "Falling back to CPU." << std::endl;
+            this->device = "cpu";
+        }
 #endif
+    } else {
+        //TODO: implement transfer to CPU
+        //On movement to CPU, tensors must be fully realized.
     }
 }
 
