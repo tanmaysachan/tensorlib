@@ -6,15 +6,16 @@
 using namespace tensorlib;
 
 int main() {
-    std::vector<int> data = {1, 2, 3, 4, 5, 6};
+    /* std::vector<int> data = {1, 2, 3, 4, 5, 6}; */
     std::vector<int> shape = {2, 3};
-    Tensor<int> t(data, shape);
+    Tensor<int> t({1, 2, 3, 4, 5, 6}, shape);
     t.to("gpu");
     std::cout << t << std::endl;
 
-    std::vector<float> data1 = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
+    std::vector<float> data1 = {1.5, 2.2, 3.1, 4.5, 5.8, 6.0};
     std::vector<int> shape1 = {2, 3};
     Tensor<float> t1(data1, shape1);
+    t1.to("gpu");
     std::cout << t1 << std::endl;
 
     std::vector<int> data2 = {5, 6, 7, 8, 10, 11};

@@ -25,3 +25,19 @@ kernel void mul_v_i64 (device const long* inA,
 {
     result[index] = inA[index] * inB[index];
 }
+
+kernel void add_v_i32 (device const int* inA,
+                           device const int* inB,
+                           device int* result,
+                           uint index [[thread_position_in_grid]])
+{
+    result[index] = inA[index] + inB[index];
+}
+
+kernel void add_v_i64 (device const long* inA,
+                           device const long* inB,
+                           device long* result,
+                           uint index [[thread_position_in_grid]])
+{
+    result[index] = inA[index] + inB[index];
+}

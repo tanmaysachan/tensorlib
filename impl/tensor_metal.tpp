@@ -12,7 +12,8 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
 
     auto defaultLibrary = this->device->newDefaultLibrary();
     if (!defaultLibrary) {
-        std::cerr << "Failed to find the default library.\n";
+        VOUT << "Failed to find the default library"
+            << "\nCannot run on current device, change to cpu." << std::endl;
         exit(-1);
     }
     // Initialize shader functions into pipelines
@@ -21,6 +22,8 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
         "mul_v_i32",
         "mul_v_i64",
         "mul_v_f32",
+        "add_v_i32",
+        "add_v_i64",
     };
     NS::Error* error;
     for (auto func: shader_functions) {
@@ -34,48 +37,78 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
 
 template <typename T>
 TensorMetalWrapper<T>::~TensorMetalWrapper() {
+    // print typename
+    DBOUT << "TensorMetalWrapper<" << typeid(T).name() << ">" << " released" << std::endl;
     pool->release();
 }
 
 template <typename T>
-int TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
+void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
     // Allot memory, map to tuid, copy data
     std::string tuid = tensor_ptr->tuid;
     long long int mem_reqd = tensor_ptr->get_mem_size();
 
     MTL::Buffer* newbuf = device->newBuffer(mem_reqd, MTL::ResourceStorageModeShared);
     if (!newbuf) {
-        DBOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
-        return 1;
+        VOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
     }
-    tensor_buffer_map.insert(std::make_pair(tuid, newbuf));
+    tensor_membuf_map.insert(std::make_pair(tuid, newbuf));
 
     T* data = (T*) newbuf->contents();
     for (unsigned long int index = 0; index < tensor_ptr->data.size(); ++index)
         data[index] = tensor_ptr->data[index];
 
-    DBOUT << "Assigned tensor id \"" << tuid << "\" to device \""
+    VOUT << "Assigned tensor id \"" << tuid << "\" to device \""
         << tensor_ptr->device << "\"" << std::endl;
-
-    return 0;
 }
 
 template <typename T>
-int TensorMetalWrapper<T>::enqueue_kernel(std::string tuid1, std::string tuid2, std::string func) {
+void TensorMetalWrapper<T>::enqueue_kernel(
+        std::string tuid1,
+        std::string tuid2,
+        std::string rtuid,
+        std::string fn_name) {
     MTL::CommandBuffer* command_buf = command_queue->commandBuffer();
     if (!command_buf) {
-        DBOUT << "Failed to create command buffer on metal gpu" << std::endl;
-        return 1;
+        VOUT << "Failed to create command buffer on metal gpu" << std::endl;
     }
     MTL::ComputeCommandEncoder* encoder = command_buf->computeCommandEncoder();
     if (!encoder) {
-        DBOUT << "Failed to create command encoder on metal gpu" << std::endl;
-        return 1;
+        VOUT << "Failed to create command encoder on metal gpu" << std::endl;
     }
 
-    DBOUT << func << std::endl;
+    auto fn = compute_functions[fn_name];
+
+    encoder->setComputePipelineState(fn);
+
+    // 3rd argument is the index of the buffer in the shader arguments
+    encoder->setBuffer(tensor_membuf_map[tuid1], 0, 0);
+    encoder->setBuffer(tensor_membuf_map[tuid2], 0, 1);
+    encoder->setBuffer(tensor_membuf_map[rtuid], 0, 2);
+    
+    int tensor1_size = tensor_membuf_map[tuid1]->length();
+    int tensor2_size = tensor_membuf_map[tuid2]->length();
+    int tensorR_size = tensor_membuf_map[rtuid]->length();
+
+    MTL::Size grid_size = MTL::Size(tensorR_size, 1, 1);
+    
+    // Calculate a threadgroup size.
+    NS::UInteger maxthreads = fn->maxTotalThreadsPerThreadgroup();
+    MTL::Size thread_group_size = MTL::Size(
+                maxthreads > tensorR_size ? tensorR_size : maxthreads,
+                1, 1);
+    encoder->dispatchThreads(grid_size, thread_group_size);
     encoder->endEncoding();
-    return 0;
+}
+
+template <typename T>
+void TensorMetalWrapper<T>::realize(std::string tuid) {
+    try {
+        auto gpu_command_buf = tensor_cmdbuf_map.at(tuid);
+        gpu_command_buf->commit();
+    } catch (std::out_of_range& e) {
+        DBOUT << "Failed to realize tensor id \"" << tuid << "\"" << std::endl;
+    }
 }
 
 
@@ -85,9 +118,9 @@ int TensorMetalWrapper<T>::enqueue_kernel(std::string tuid1, std::string tuid2, 
 template <typename T>
 void TensorMetalWrapper<T>::prepareData() {
     // Allocate three buffers to hold our initial data and the result.
-    mBufferA = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModeShared);
-    mBufferB = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModeShared);
-    mBufferResult = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModeShared);
+    mBufferA = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModePrivate);
+    mBufferB = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModePrivate);
+    mBufferResult = device->newBuffer(BUFFER_SIZE, MTL::ResourceStorageModePrivate);
 
     generateRandomIntData(mBufferA);
     generateRandomIntData(mBufferB);
@@ -96,7 +129,7 @@ void TensorMetalWrapper<T>::prepareData() {
 template <typename T>
 void TensorMetalWrapper<T>::generateRandomIntData(MTL::Buffer * buffer) {
     int* dataPtr = (int*) buffer->contents();
-    
+
     for(unsigned long int index = 0; index < ARRAY_LENGTH; index++)
         dataPtr[index] = 2;
 }

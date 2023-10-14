@@ -3,7 +3,10 @@
 #include <numeric>
 #include <type_traits>
 
-/* Tensor repr */
+/* ----------------------
+ *     Tensor repr
+ * ---------------------- */
+
 /* global namespace */
 template<typename T>
 void __print_util(std::ostream& os,
@@ -40,13 +43,16 @@ std::ostream& operator<<(std::ostream& os, const tensorlib::Tensor<T>& tensor) {
     return os;
 }
 
-/* Tensor implementation */
+
+/* ----------------------
+ * Tensor Implementation
+ * ---------------------- */
 namespace tensorlib {
 
 template <typename T>
 tensorlib::Tensor<T>::Tensor(
-    std::vector<T>& data,
-    std::vector<int>& shape,
+    std::vector<T>const& data,
+    std::vector<int>const& shape,
     bool requires_grad,
     std::string dtype,
     std::string device)
@@ -55,6 +61,8 @@ tensorlib::Tensor<T>::Tensor(
         requires_grad(requires_grad) {
     assert(this->data.size() ==
            std::accumulate(this->shape.begin(), this->shape.end(), 1, std::multiplies<int>()));
+    // initialize on cpu, shift if anything else
+    this->device = "cpu";
     // infer dtype
     if (dtype == "none") {
         if (std::is_same<T, int>::value ||
@@ -70,21 +78,33 @@ tensorlib::Tensor<T>::Tensor(
     }
     if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
     // Assign incremental tensor id
-    this->tuid = "Tensor_" + std::to_string(global_tensor_count);
-    global_tensor_count++;
+    this->tuid = "Tensor_" + std::to_string(__global_tensor_count);
+    __global_tensor_count++;
 
-    this->device = device;
-    if (this->device != "cpu") {
-        to(this->device);
-    }
+    // Offer ownership to global tensor map
+    __global_tensor_map<T>[this->tuid].reset(this);
 
 #ifdef RUN_METAL
-    if (!metal_interface<T>)
-        metal_interface<T> = new TensorMetalWrapper<T>();
+    if (!__global_metal_interface<T>)
+        __global_metal_interface<T>.reset(new TensorMetalWrapper<T>());
+    local_metal_interface = __global_metal_interface<T>;
 #endif
+
+    if (device != "cpu") {
+        to(device);
+    }
 }
 
-/* Tensor ops */
+
+template <typename T>
+tensorlib::Tensor<T>::~Tensor() {
+    DBOUT << "Tensor " << tuid << " destroyed" << std::endl;
+    __global_tensor_map<T>[this->tuid].release();
+}
+
+/* ----------------------
+ *     Tensor Ops
+ * ---------------------- */
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
     assert(shape == other.shape);
@@ -93,12 +113,21 @@ Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
     if (this->device == "gpu" || other.device == "gpu") {
         this->to("gpu");
         other.to("gpu");
-        if (metal_interface<T>->enqueue_kernel(this->tuid, other.tuid, "mul_v_i32")) {
+        try {
+            // Generate a return tensor on device
+            Tensor<T> result = Tensor<T>(
+                    std::vector<int>(this->data.size()),
+                    std::vector<int>(this->shape), requires_grad, dtype, "gpu");
+            // Internal tensors are NOT realized instantly.
+            result.realized = false;
+            local_metal_interface->enqueue_kernel(this->tuid,
+                    other.tuid, result.tuid, "add_v_i32");
+            return result;
+        } catch (std::runtime_error& e) {
             // On kernel failure, fall back to CPU
             this->to("cpu");
             other.to("cpu");
         }
-        // TODO: return tensor promise, implement tensor promise
     }
 #endif
     std::vector<T> _data(data.size());
@@ -132,7 +161,14 @@ Tensor<T> tensorlib::Tensor<T>::operator*(Tensor& other) {
     return Tensor<T>(_data, _shape, requires_grad);
 }
 
-/* Tensor utils */
+/* ----------------------
+ *    Tensor Utils
+ * ---------------------- */
+template <typename T>
+long long int tensorlib::Tensor<T>::get_mem_size() {
+    return data.size() * sizeof(T);
+}
+
 template <typename T>
 void tensorlib::Tensor<T>::to(const std::string& device) {
     if (device == this->device) return;
@@ -142,7 +178,9 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
     this->device = device;
     if (device == "gpu") {
 #ifdef RUN_METAL
-        if (metal_interface<T>->assign(this)) {
+        try {
+            local_metal_interface->assign(this);
+        } catch (std::runtime_error& e) {
             std::cout << "Selected device \"" << device
                 << "\" not found." << std::endl;
             std::cout << "Falling back to CPU." << std::endl;
@@ -156,8 +194,8 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
 }
 
 template <typename T>
-long long int tensorlib::Tensor<T>::get_mem_size() {
-    return data.size() * sizeof(T);
+void tensorlib::Tensor<T>::realize() {
+
 }
 
 } // namespace tensorlib

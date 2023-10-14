@@ -30,12 +30,22 @@ public:
     MTL::Buffer* mBufferB;
     MTL::Buffer* mBufferResult;
 
-    std::map<std::string, MTL::Buffer*> tensor_buffer_map;
-    int assign(tensorlib::Tensor<T>* const tensor_ptr);
+    // Maps tensor uid to its memory buffer
+    std::map<std::string, MTL::Buffer*> tensor_membuf_map;
+    // Maps tensor uid to its command buffer, to be executed on realization
+    std::map<std::string, MTL::CommandBuffer*> tensor_cmdbuf_map;
+    void assign(tensorlib::Tensor<T>* const tensor_ptr);
     // single tensor functions
-    int enqueue_kernel(std::string tuid, std::string func);
+    void enqueue_kernel(std::string tuid,
+            std::string rtuid,
+            std::string fn_name);
     // two tensor functions
-    int enqueue_kernel(std::string tuid1, std::string tuid2, std::string func);
+    void enqueue_kernel(std::string tuid1,
+            std::string tuid2,
+            std::string rtuid,
+            std::string fn_name);
+
+    void realize(std::string tuid);
 
     void initDevice();
     void prepareData();

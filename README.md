@@ -13,4 +13,4 @@ That's it. Tensorlib == tensor library.
 
 ### Usage
 1. Make sure metal compiler is installed.
-2. `make`
+2. `make DEBUG=1 RUN_METAL=1` or `make DEBUG=1 RUN_METAL=1 rebuild` for a fresh build.
