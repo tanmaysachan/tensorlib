@@ -44,15 +44,11 @@ public:
             std::string tuid2,
             std::string rtuid,
             std::string fn_name);
+    void schedule_realize(std::string tuid);
+    void wait_for(std::string tuid);
+    void copy_to_host(tensorlib::Tensor<T>* const tensor_ptr);
 
-    void realize(std::string tuid);
-
-    void initDevice();
-    void prepareData();
-    void generateRandomIntData(MTL::Buffer* buffer);
-    void sendComputeCommand();
-    void encodeComputeCommand(MTL::ComputeCommandEncoder* computeEncoder);
-    void verifyResults();
+    tensorlib::BUFFER_STATUS get_cmdbuf_status(std::string tuid);
 };
 
 // TODO: Unable to separately compile

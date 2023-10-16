@@ -20,9 +20,31 @@
     #define VOUT 0 && std::cout
 #endif
 
+// CPU parallelization
+#ifndef NTHREADS
+    #define NTHREADS 1
+#endif
+
 namespace tensorlib {
     template <typename T>
     class Tensor;
+    // Used for GPU status tracking
+    // Wrappers to convert their status to these values
+    enum class BUFFER_STATUS {
+        IDLE,
+        BUSY,
+        DONE,
+        ERROR,
+    };
+    // Keep track of all tensors created, and useful for unique id generation
+    long long int __global_tensor_count = 0;
+    // Helpful for ownership management.
+    // Tensors offer their ownership to this map through unique_ptr
+    // (However the unique_ptr must be released if a tensor is destroyed prematurely,
+    // see the destructor tensorlib::Tensor<T>::~Tensor())
+    // For passing tensors around, we use strings
+    template <typename T>
+    std::map<std::string, std::unique_ptr<Tensor<T>>> __global_tensor_map;
 }
 
 template <typename T>
@@ -33,16 +55,6 @@ std::ostream& operator<<(std::ostream& os, const tensorlib::Tensor<T>& tensor);
 #endif
 
 namespace tensorlib {
-
-// Keep track of all tensors created, and useful for unique id generation
-long long int __global_tensor_count = 0;
-
-// Helpful for cleanup
-// Tensors offer their ownership to this map through unique_ptr
-// (However the unique_ptr must be released if a tensor is destroyed prematurely,
-// see the destructor tensorlib::Tensor<T>::~Tensor())
-template <typename T>
-std::map<std::string, std::unique_ptr<Tensor<T>>> __global_tensor_map;
 
 // GPU interfaces
 // TODO: Make this generic
@@ -57,6 +69,7 @@ class Tensor {
     std::vector<int> strides;
     std::vector<T> grad;
     std::function<T(T)> grad_fn;
+    std::vector<std::string> parents;
 
 #ifdef RUN_METAL
     std::shared_ptr<TensorMetalWrapper<T>> local_metal_interface;
@@ -74,20 +87,29 @@ public:
     // through operations are not, they need to be realized to have
     // value. This is done to make gpu ops easily parallelizable.
     bool realized = true;
+    // Helpful for GPU scheduling
+    bool queued_realization = false;
 
     Tensor(std::vector<T>const& data,
         std::vector<int>const& shape,
         bool requires_grad = true,
-        std::string dtype = "none",
-        std::string device = "cpu");
+        const std::string& dtype = "none",
+        const std::string& device = "cpu");
 
     ~Tensor();
 
     /* Tensor repr */
     template <typename U>
-    friend std::ostream& ::operator<<(std::ostream& os, const tensorlib::Tensor<U>& tensor);
+    friend std::ostream& ::operator<<(std::ostream& os, tensorlib::Tensor<U>& tensor);
 
     /* Tensor ops */
+    inline Tensor<T> __unaryop_boilerplate(
+            Tensor<T>& a,
+            const std::string& op_name);
+    inline Tensor<T> __binop_boilerplate(
+            Tensor<T>& a,
+            Tensor<T>& b,
+            const std::string& op_name);
     Tensor<T> operator+(Tensor<T>& other);
     Tensor<T> operator-(Tensor<T>& other);
     Tensor<T> operator*(Tensor<T>& other);
@@ -100,7 +122,10 @@ public:
     /* Tensor utils */
     long long int get_mem_size();
     void to(const std::string& device);
-    void realize();
+    // Realize the tensor.
+    // force = true makes the thread wait
+    // until the tensor is realized.
+    void realize(bool force = false);
 };
 
 } // namespace TensorLib
