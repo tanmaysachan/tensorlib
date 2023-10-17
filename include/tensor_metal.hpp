@@ -36,14 +36,17 @@ public:
     std::map<std::string, MTL::CommandBuffer*> tensor_cmdbuf_map;
     void assign(tensorlib::Tensor<T>* const tensor_ptr);
     // single tensor functions
-    void enqueue_kernel(std::string tuid,
-            std::string rtuid,
-            std::string fn_name);
+    void enqueue_kernel(
+            const std::string& tuid,
+            const std::string& rtuid,
+            const std::string& fn_name);
     // two tensor functions
-    void enqueue_kernel(std::string tuid1,
-            std::string tuid2,
-            std::string rtuid,
-            std::string fn_name);
+    void enqueue_kernel(
+            const std::string& tuid1,
+            const std::string& tuid2,
+            const std::string& rtuid,
+            const std::string& fn_name);
+
     void schedule_realize(std::string tuid);
     void wait_for(std::string tuid);
     void copy_to_host(tensorlib::Tensor<T>* const tensor_ptr);

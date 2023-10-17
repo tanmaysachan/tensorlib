@@ -65,10 +65,10 @@ void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
 
 template <typename T>
 void TensorMetalWrapper<T>::enqueue_kernel(
-        std::string tuid1,
-        std::string tuid2,
-        std::string rtuid,
-        std::string fn_name) {
+        const std::string& tuid1,
+        const std::string& tuid2,
+        const std::string& rtuid,
+        const std::string& fn_name) {
     MTL::CommandBuffer* command_buf = command_queue->commandBuffer();
     if (!command_buf)
         VOUT << "Failed to create command buffer on metal gpu." << std::endl;
@@ -103,6 +103,8 @@ void TensorMetalWrapper<T>::schedule_realize(std::string tuid) {
     try {
         auto cmd_buf = tensor_cmdbuf_map.at(tuid);
         cmd_buf->commit();
+        // Requeue, because committed buffers can't be reused apparently.
+
     } catch (std::out_of_range& e) {
         VOUT << "Stray tensor being realized? tuid - " << tuid << std::endl;
     }
