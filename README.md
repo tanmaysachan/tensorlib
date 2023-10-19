@@ -14,3 +14,28 @@ That's it. Tensorlib == tensor library.
 ### Usage
 1. Make sure metal compiler is installed.
 2. `make DEBUG=1 RUN_METAL=1` or `make DEBUG=1 RUN_METAL=1 rebuild` for a fresh build.
+
+### Notes
+1. Tensors are by default lazy if not present on CPU. They can be realized and printed by moving to the CPU.
+2. Example of a tensor addition -
+
+```c++
+#include "tensor.hpp"
+using namespace tensorlib;
+
+// Inside function body
+//              --- Contents ---, -Shape-
+Tensor<int> t1({1, 2, 3, 4, 5, 6}, {2, 3});
+t1.to("gpu");
+Tensor<int> t2({4, 5, 6, 7, 8, 9}, {2, 3});
+t2.to("gpu");
+// If tensors on GPU, result will be on GPU
+Tensor<int> result = t1 + t2;
+result.to("cpu");
+std::cout << result << std::endl;
+// Expected out - "Tensor([[5,7,9],[11,13,15]], dtype=i32, device=cpu)"
+```
+
+### TODO
+1. Backprop.
+2. Better kernels for metal.
