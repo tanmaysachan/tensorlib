@@ -37,5 +37,7 @@ std::cout << result << std::endl;
 ```
 
 ### TODO
-1. Backprop.
-2. Better kernels for metal.
+1. Shape tracking and inference.
+2. More ops and efficient kernels.
+3. Backprop.
+4. Better kernels for metal.
