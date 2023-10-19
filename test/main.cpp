@@ -10,6 +10,10 @@ int main() {
     std::cout << "t0 " << t0 << std::endl;
     t0.to("gpu");
 
+    Tensor<int> t0i({1, 2, 3, 4, 5, 6}, {2, 3});
+    std::cout << "t0i " << t0i << std::endl;
+    t0i.to("gpu");
+
     Tensor<float> t1({1, 2.3, 3, 4, 5, 6}, {2, 3});
     std::cout << "t1 " << t1 << std::endl;
     t1.to("gpu");
@@ -33,7 +37,7 @@ int main() {
     /* Expected t5 = {4, 16, 36, 64, 100, 144} */
     std::cout << t5 << std::endl;
 
-    Tensor<float> t6 = t5 - t0;
+    Tensor<float> t6 = t3 - t0;
     t6.to("cpu");
     /* Expected t6 = {3, 14, 33, 60, 95, 138} */
     std::cout << t6 << std::endl;

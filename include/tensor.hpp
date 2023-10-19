@@ -96,6 +96,8 @@ public:
         const std::string& dtype = "none",
         const std::string& device = "cpu");
 
+    Tensor(Tensor<T>& other); // Copy constructor
+
     ~Tensor();
 
     /* Tensor repr */

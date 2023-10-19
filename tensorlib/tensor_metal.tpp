@@ -48,7 +48,7 @@ TensorMetalWrapper<T>::~TensorMetalWrapper() {
 template <typename T>
 void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
     // Allot memory, map to tuid, copy data
-    std::string tuid = tensor_ptr->tuid;
+    const std::string& tuid = tensor_ptr->tuid;
     if (tensor_membuf_map.find(tuid) != tensor_membuf_map.end()) return;
     long long int mem_reqd = tensor_ptr->get_mem_size();
 
@@ -65,23 +65,22 @@ void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
 
 template <typename T>
 void TensorMetalWrapper<T>::enqueue_kernel(
-        const std::string& tuid1,
-        const std::string& tuid2,
+        const std::vector<const std::string>& tuids,
         const std::string& rtuid,
         const std::string& fn_name) {
-    MTL::CommandBuffer* command_buf = command_queue->commandBuffer();
-    if (!command_buf)
+    MTL::CommandBuffer* cmd_buf = command_queue->commandBuffer();
+    if (!cmd_buf)
         VOUT << "Failed to create command buffer on metal gpu." << std::endl;
-    MTL::ComputeCommandEncoder* encoder = command_buf->computeCommandEncoder();
+    MTL::ComputeCommandEncoder* encoder = cmd_buf->computeCommandEncoder();
     if (!encoder)
         VOUT << "Failed to create command encoder on metal gpu." << std::endl;
 
     auto fn = compute_functions[fn_name];
     encoder->setComputePipelineState(fn);
     // 3rd argument is the index of the buffer in the shader arguments
-    encoder->setBuffer(tensor_membuf_map[tuid1], 0, 0);
-    encoder->setBuffer(tensor_membuf_map[tuid2], 0, 1);
-    encoder->setBuffer(tensor_membuf_map[rtuid], 0, 2);
+    for (unsigned long int i = 0; i < tuids.size(); ++i)
+        encoder->setBuffer(tensor_membuf_map.at(tuids[i]), 0, i);
+    encoder->setBuffer(tensor_membuf_map[rtuid], 0, tuids.size());
 
     // NOTE: Length of the result tensor handled by the TensorLibrary,
     // Not the wrappers.
@@ -95,25 +94,39 @@ void TensorMetalWrapper<T>::enqueue_kernel(
                 1, 1);
     encoder->dispatchThreads(grid_size, thread_group_size);
     encoder->endEncoding();
-    tensor_cmdbuf_map.insert(std::make_pair(rtuid, command_buf));
+
+    tensor_cmdbuf_map.insert(std::make_pair(rtuid, (kernel_info){
+        // Struct to hold command buffer info
+        // See tensor_metal.hpp for details
+        tuids,
+        rtuid,
+        fn_name,
+        cmd_buf
+    }));
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::schedule_realize(std::string tuid) {
-    try {
-        auto cmd_buf = tensor_cmdbuf_map.at(tuid);
-        cmd_buf->commit();
-        // Requeue, because committed buffers can't be reused apparently.
+void TensorMetalWrapper<T>::requeue() {
+    for (auto it : to_requeue) {
+        enqueue_kernel(it.parent_tuids, it.rtuid, it.fn_name);
+    }
+}
 
+template <typename T>
+void TensorMetalWrapper<T>::schedule_realize(const std::string& tuid) {
+    try {
+        auto __kernel_info = tensor_cmdbuf_map.at(tuid);
+        __kernel_info.cmd_buf->commit();
+        to_requeue.push_back(__kernel_info);
     } catch (std::out_of_range& e) {
         VOUT << "Stray tensor being realized? tuid - " << tuid << std::endl;
     }
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::wait_for(std::string tuid) {
+void TensorMetalWrapper<T>::wait_for(const std::string& tuid) {
     try {
-        auto cmd_buf = tensor_cmdbuf_map.at(tuid);
+        auto cmd_buf = tensor_cmdbuf_map.at(tuid).cmd_buf;
         cmd_buf->waitUntilCompleted();
     } catch(std::out_of_range& e) {
         // Ignore on miss
@@ -129,8 +142,8 @@ void TensorMetalWrapper<T>::copy_to_host(tensorlib::Tensor<T>* const tensor_ptr)
 }
 
 template <typename T>
-tensorlib::BUFFER_STATUS TensorMetalWrapper<T>::get_cmdbuf_status(std::string tuid) {
-    auto cmd_buf = tensor_cmdbuf_map.at(tuid);
+tensorlib::BUFFER_STATUS TensorMetalWrapper<T>::get_cmdbuf_status(const std::string& tuid) {
+    auto cmd_buf = tensor_cmdbuf_map.at(tuid).cmd_buf;
     // Convert MTL statuses to tensorlib statuses
     switch (cmd_buf->status()) {
         case MTL::CommandBufferStatusNotEnqueued:

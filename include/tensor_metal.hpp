@@ -23,35 +23,36 @@ public:
     ~TensorMetalWrapper();
 
     MTL::CommandQueue* command_queue;
-    std::map<std::string, MTL::ComputePipelineState*> compute_functions;
-    /* std::map<std::string, MTL::CommandBuffer*> command_buffers; */
-
-    MTL::Buffer* mBufferA;
-    MTL::Buffer* mBufferB;
-    MTL::Buffer* mBufferResult;
+    std::map<const std::string, MTL::ComputePipelineState*> compute_functions;
 
     // Maps tensor uid to its memory buffer
-    std::map<std::string, MTL::Buffer*> tensor_membuf_map;
-    // Maps tensor uid to its command buffer, to be executed on realization
-    std::map<std::string, MTL::CommandBuffer*> tensor_cmdbuf_map;
+    std::map<const std::string, MTL::Buffer*> tensor_membuf_map;
+    // Maps tensor uid to its command buffer, parent tensors and function
+    // to be executed on realization.
+    // NOTE: Tracking parent tensors because metal doesn't support
+    // reusing command buffers. To recreate them, we need the parent ids,
+    // the function name, all that good info.
+    typedef struct {
+        std::vector<const std::string> parent_tuids;
+        const std::string rtuid;
+        const std::string fn_name;
+        MTL::CommandBuffer* cmd_buf;
+    } kernel_info;
+    std::map<const std::string, kernel_info> tensor_cmdbuf_map;
     void assign(tensorlib::Tensor<T>* const tensor_ptr);
-    // single tensor functions
+    // tensor functions
     void enqueue_kernel(
-            const std::string& tuid,
+            const std::vector<const std::string>& tuids,
             const std::string& rtuid,
             const std::string& fn_name);
-    // two tensor functions
-    void enqueue_kernel(
-            const std::string& tuid1,
-            const std::string& tuid2,
-            const std::string& rtuid,
-            const std::string& fn_name);
+    std::vector<kernel_info> to_requeue;
+    void requeue();
 
-    void schedule_realize(std::string tuid);
-    void wait_for(std::string tuid);
+        void schedule_realize(const std::string& tuid);
+    void wait_for(const std::string& tuid);
     void copy_to_host(tensorlib::Tensor<T>* const tensor_ptr);
 
-    tensorlib::BUFFER_STATUS get_cmdbuf_status(std::string tuid);
+    tensorlib::BUFFER_STATUS get_cmdbuf_status(const std::string& tuid);
 };
 
 // TODO: Unable to separately compile

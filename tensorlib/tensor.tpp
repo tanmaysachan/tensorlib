@@ -87,7 +87,9 @@ tensorlib::Tensor<T>::Tensor(
     }
     if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
     // Assign incremental tensor id
-    this->tuid = "Tensor_" + std::to_string(__global_tensor_count);
+    this->tuid = std::to_string(__global_tensor_count) +
+        "_" + this->dtype +
+        "_" + "Tensor";
     __global_tensor_count++;
     // Offer ownership to global tensor map
     __global_tensor_map<T>[this->tuid].reset(std::move(this));
@@ -99,6 +101,10 @@ tensorlib::Tensor<T>::Tensor(
     if (device != "cpu") to(device);
 }
 
+template <typename T>
+tensorlib::Tensor<T>::Tensor(Tensor& other) {
+    throw std::runtime_error("Copying a tensor signifies destroying its history.");
+}
 
 // Release from unique_ptr if being destroyed
 template <typename T>
@@ -135,11 +141,11 @@ inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
         result.realized = false;
         try {
 #ifdef RUN_METAL
-            local_metal_interface->enqueue_kernel(a.tuid,
+            local_metal_interface->enqueue_kernel({a.tuid, b.tuid},
                     // Trying to follow a naming convention
                     // with the kernel names. The "_v_" is meant
                     // to indicate vector
-                    b.tuid, result.tuid, op_name + "_v_" + dtype);
+                    result.tuid, op_name + "_v_" + dtype);
 #else
             throw std::runtime_error("device not enabled");
 #endif
