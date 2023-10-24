@@ -1,6 +1,6 @@
-# Tensorlib
+# Tensorpp
 
-That's it. Tensorlib == tensor library.
+It's a tensor library in C++.
 
 ### Expectations
 1. Somewhat fast, on macs atleast.
@@ -41,3 +41,4 @@ std::cout << result << std::endl;
 2. More ops and efficient kernels.
 3. Backprop.
 4. Better kernels for metal.
+5. Treat CPU as an accelerator, avx and all that.
