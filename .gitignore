@@ -3,3 +3,6 @@ build/
 *.metallib
 *.o
 main
+
+# ctags
+tags
