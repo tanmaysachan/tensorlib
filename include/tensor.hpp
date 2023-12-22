@@ -80,7 +80,8 @@ public:
     std::vector<int> shape;
     std::string dtype;
     std::string device;
-    std::string tuid; // tensor unique id
+    // tensor unique id
+    std::string tuid;
     bool requires_grad;
     // By default user-created tensors are fully "realized", i.e.
     // They do not need any processing. However, tensors created
@@ -103,6 +104,13 @@ public:
     /* Tensor repr */
     template <typename U>
     friend std::ostream& ::operator<<(std::ostream& os, tensorlib::Tensor<U>& tensor);
+
+    /* Equality */
+    /* TODO: to be used for testing only right now. Equality checks on tensor
+     * would be much more complicated than this. */
+    friend bool operator==(const Tensor<T>& a, const Tensor<T>& b) {
+        return a.data == b.data && a.shape == b.shape && a.dtype == b.dtype;
+    }
 
     /* Tensor ops */
     inline Tensor<T> __unaryop_boilerplate(

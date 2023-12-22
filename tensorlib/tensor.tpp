@@ -70,8 +70,9 @@ tensorlib::Tensor<T>::Tensor(
            std::accumulate(this->shape.begin(),
                this->shape.end(),
                1, std::multiplies<int>()));
-    // initialize on cpu, shift if anything else
-    this->device = "cpu";
+    // Lazy assignment, not moved yet.
+    // Will be moved to device if requested through realize()
+    this->device = device;
     // infer dtype if none
     this->dtype = dtype;
     if (dtype == "none") {
@@ -98,7 +99,6 @@ tensorlib::Tensor<T>::Tensor(
         __global_metal_interface<T>.reset(new TensorMetalWrapper<T>());
     local_metal_interface = __global_metal_interface<T>;
 #endif
-    if (device != "cpu") to(device);
 }
 
 template <typename T>
@@ -203,13 +203,12 @@ long long int tensorlib::Tensor<T>::get_mem_size() {
 
 template <typename T>
 void tensorlib::Tensor<T>::to(const std::string& device) {
-    if (this->device == device) return;
     if (device != "cpu" && device != "gpu")
         throw std::runtime_error("device not implemented");
     if (device == "gpu") {
         try {
 #ifdef RUN_METAL
-            local_metal_interface->assign(this);
+            local_metal_interface->assign(this->tuid, this->data);
 #else
             throw std::runtime_error("device not enabled");
 #endif
@@ -217,6 +216,7 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
             std::cout << "Selected device \"" << device
                 << "\" not found." << std::endl;
             std::cout << "Falling back to CPU." << std::endl;
+            std::cerr << "Error: " << e.what() << std::endl;
             this->device = "cpu";
             return;
         }
@@ -228,7 +228,7 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
         }
 #ifdef RUN_METAL
         // Copy memory into data vector
-        local_metal_interface->copy_to_host(this);
+        local_metal_interface->copy_to_host(this->tuid, this->data);
 #endif
     }
     this->device = device;
@@ -246,6 +246,8 @@ void tensorlib::Tensor<T>::realize(bool force) {
             graph construction error."
         );
     }
+    // Explicitly move tensor to device to force memory assignment
+    this->to(device);
     // Check if parents are realized.
     bool parents_realized = true;
     for (auto& parent : parents) {

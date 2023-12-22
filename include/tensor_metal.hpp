@@ -39,7 +39,7 @@ public:
         MTL::CommandBuffer* cmd_buf;
     } kernel_info;
     std::map<const std::string, kernel_info> tensor_cmdbuf_map;
-    void assign(tensorlib::Tensor<T>* const tensor_ptr);
+    void assign(const std::string& tuid, const std::vector<T>& data);
     // tensor functions
     void enqueue_kernel(
             const std::vector<const std::string>& tuids,
@@ -50,7 +50,7 @@ public:
 
         void schedule_realize(const std::string& tuid);
     void wait_for(const std::string& tuid);
-    void copy_to_host(tensorlib::Tensor<T>* const tensor_ptr);
+    void copy_to_host(const std::string& tuid, std::vector<T>& data);
 
     tensorlib::BUFFER_STATUS get_cmdbuf_status(const std::string& tuid);
 };

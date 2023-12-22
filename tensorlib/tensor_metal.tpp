@@ -10,8 +10,8 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
     else
         this->device = MTL::CreateSystemDefaultDevice();
 
-    auto defaultLibrary = this->device->newDefaultLibrary();
-    if (!defaultLibrary) {
+    auto default_library = this->device->newDefaultLibrary();
+    if (!default_library) {
         VOUT << "Failed to find the default library"
             << "\nCannot run on current device, change to cpu." << std::endl;
         exit(-1);
@@ -32,7 +32,7 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
     NS::Error* error;
     for (auto func: shader_functions) {
         auto _f = NS::String::string(func.c_str(), NS::ASCIIStringEncoding);
-        auto f = defaultLibrary->newFunction(_f);
+        auto f = default_library->newFunction(_f);
         auto pipeline_state = this->device->newComputePipelineState(f, &error);
         compute_functions.insert(std::make_pair(func, pipeline_state));
     }
@@ -46,21 +46,19 @@ TensorMetalWrapper<T>::~TensorMetalWrapper() {
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::assign(tensorlib::Tensor<T>* const tensor_ptr) {
+void TensorMetalWrapper<T>::assign(const std::string& tuid, const std::vector<T>& data) {
     // Allot memory, map to tuid, copy data
-    const std::string& tuid = tensor_ptr->tuid;
     if (tensor_membuf_map.find(tuid) != tensor_membuf_map.end()) return;
-    long long int mem_reqd = tensor_ptr->get_mem_size();
 
-    MTL::Buffer* newbuf = device->newBuffer(mem_reqd, MTL::ResourceStorageModeShared);
+    MTL::Buffer* newbuf = device->newBuffer(data.size()*sizeof(T), MTL::ResourceStorageModePrivate);
     if (!newbuf) {
         VOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
     }
     tensor_membuf_map.insert(std::make_pair(tuid, newbuf));
 
-    T* data = (T*) newbuf->contents();
-    for (unsigned long int index = 0; index < tensor_ptr->data.size(); ++index)
-        data[index] = tensor_ptr->data[index];
+    T* device_data = (T*) newbuf->contents();
+    for (unsigned long int index = 0; index < data.size(); ++index)
+        device_data[index] = data[index];
 }
 
 template <typename T>
@@ -134,11 +132,11 @@ void TensorMetalWrapper<T>::wait_for(const std::string& tuid) {
 }
 
 template <typename T>
-void TensorMetalWrapper<T>::copy_to_host(tensorlib::Tensor<T>* const tensor_ptr) {
-    MTL::Buffer* buf = tensor_membuf_map.at(tensor_ptr->tuid);
-    T* data = (T*) buf->contents();
-    for (unsigned long int index = 0; index < tensor_ptr->data.size(); ++index)
-        tensor_ptr->data[index] = data[index];
+void TensorMetalWrapper<T>::copy_to_host(const std::string& tuid, std::vector<T>& data) {
+    MTL::Buffer* buf = tensor_membuf_map.at(tuid);
+    T* device_data = (T*) buf->contents();
+    for (unsigned long int index = 0; index < data.size(); ++index)
+        data[index] = device_data[index];
 }
 
 template <typename T>

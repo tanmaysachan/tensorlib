@@ -24,11 +24,11 @@ else
 	DEFINES += -DNTHREADS=1
 endif
 
-main: build/default.metallib build/main.o
-	$(CXX) $(CXXFLAGS) $(BUILD_DIR)/*.o -o main $(FRAMEWORKS) $(SANITIZE)
+test: build/default.metallib build/test.o
+	$(CXX) $(CXXFLAGS) $(BUILD_DIR)/*.o -o run_tests $(FRAMEWORKS) $(SANITIZE)
 
-build/main.o:
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $(DEFINES) $(GDB) -c test/main.cpp -o $(BUILD_DIR)/main.o $(SANITIZE)
+build/test.o:
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(DEFINES) $(GDB) -c test/test.cpp -o $(BUILD_DIR)/test.o $(SANITIZE)
 
 build/default.metallib:
 	xcrun -sdk macosx metal -c shaders/tensor.metal -o $(BUILD_DIR)/tensor.air
@@ -36,8 +36,8 @@ build/default.metallib:
 	xxd -i default.metallib > default_metallib.h
 
 clean:
-	rm -rf main *.o $(BUILD_DIR)/* *.metallib *.air *.h
+	rm -rf run_tests *.o $(BUILD_DIR)/* *.metallib *.air *.h
 
-build: main
+build: test
 
 rebuild: clean build
