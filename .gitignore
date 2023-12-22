@@ -3,6 +3,8 @@ build/
 *.metallib
 *.o
 main
+run_tests
+.DS_STORE
 
 # ctags
 tags
