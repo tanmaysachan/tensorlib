@@ -14,6 +14,7 @@ It's a tensor library in C++.
 ### Usage
 1. Make sure metal compiler is installed.
 2. `make DEBUG=1 RUN_METAL=1` or `make DEBUG=1 RUN_METAL=1 rebuild` for a fresh build.
+3. `./run_tests`
 
 ### Notes
 1. Tensors are by default lazy if not present on CPU. They can be realized and printed by moving to the CPU.
