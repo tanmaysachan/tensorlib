@@ -24,10 +24,13 @@ else
 	DEFINES += -DNTHREADS=1
 endif
 
-test: build/default.metallib build/test.o
+test: build/default.metallib build/device.o build/utils.o build/test.o
 	$(CXX) $(CXXFLAGS) $(BUILD_DIR)/*.o -o run_tests $(FRAMEWORKS) $(SANITIZE)
 
-build/test.o:
+build/%.o: tensorlib/%.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(DEFINES) $(GDB) -c $< -o $@ $(SANITIZE)
+
+build/test.o: test/test.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(DEFINES) $(GDB) -c test/test.cpp -o $(BUILD_DIR)/test.o $(SANITIZE)
 
 build/default.metallib:

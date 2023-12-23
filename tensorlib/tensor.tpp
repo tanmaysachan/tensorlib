@@ -7,54 +7,13 @@
 #include <mutex>
 #include <map>
 
-/* ----------------------
- *     Tensor repr
- * ---------------------- */
-
-template<typename T>
-void __print_util(std::ostream& os,
-        const tensorlib::Tensor<T>& tensor,
-        int shape_idx,
-        int offset,
-        int par_size) {
-    int dim_i = tensor.shape[shape_idx];
-    int elems_per_vec = par_size/dim_i;
-    os << "[";
-    if (shape_idx == tensor.shape.size() - 1) {
-        for (int i = 0; i < dim_i; ++i) {
-            os << tensor.data[offset + i];
-            if (i != dim_i - 1) {
-                os << ",";
-            }
-        }
-    } else {
-        for  (int i = 0; i < dim_i; ++i) {
-            __print_util(os, tensor, shape_idx+1, offset+elems_per_vec*i, elems_per_vec);
-            if (i != dim_i - 1) {
-                os << ",";
-            }
-        }
-    }
-    os << "]";
-}
-
-template <typename T>
-std::ostream& operator<<(std::ostream& os, tensorlib::Tensor<T>& tensor) {
-    // Only print if on CPU
-    os << "Tensor(";
-    if (tensor.device == "cpu")
-        __print_util(os, tensor, 0, 0, tensor.data.size());
-    else
-        os << "<unrealized>";
-    os << ", dtype=" << tensor.dtype << ", device=" << tensor.device << ")";
-    return os;
-}
-
-
-/* ----------------------
- * Tensor Implementation
- * ---------------------- */
 namespace tensorlib {
+
+// UNSAFE
+template <typename T>
+void* tensorlib::Tensor<T>::get_raw_data_ptr() {
+    return static_cast<void*>(data.data());
+}
 
 template <typename T>
 tensorlib::Tensor<T>::Tensor(
@@ -66,44 +25,58 @@ tensorlib::Tensor<T>::Tensor(
     :   data(std::move(data)),
         shape(std::move(shape)),
         requires_grad(requires_grad) {
-    assert(this->data.size() ==
-           std::accumulate(this->shape.begin(),
-               this->shape.end(),
-               1, std::multiplies<int>()));
+    assert(this->data.size() == std::accumulate(this->shape.begin(),
+           this->shape.end(),
+           1, std::multiplies<int>()));
     // Lazy assignment, not moved yet.
     // Will be moved to device if requested through realize()
-    this->device = device;
+    assign_device(device);
+
     // infer dtype if none
-    this->dtype = dtype;
-    if (dtype == "none") {
-        if (std::is_same<T, int>::value ||
-            std::is_same<T, long>:: value ||
-            std::is_same<T, long long>::value)
-            this->dtype = "i" + std::to_string(sizeof(T)*8);
-        else if (std::is_same<T, float>::value ||
-                    std::is_same<T, double>::value)
-            this->dtype = "f" + std::to_string(sizeof(T)*8);
-        else if (std::is_same<T, bool>::value)
-            this->dtype = "b" + std::to_string(sizeof(T)*8);
+    {
+        this->dtype = dtype;
+        if (dtype == "none") {
+            if (std::is_same<T, int>::value ||
+                std::is_same<T, long>:: value ||
+                std::is_same<T, long long>::value)
+                this->dtype = "i" + std::to_string(sizeof(T)*8);
+            else if (std::is_same<T, float>::value ||
+                        std::is_same<T, double>::value)
+                this->dtype = "f" + std::to_string(sizeof(T)*8);
+            else if (std::is_same<T, bool>::value)
+                this->dtype = "b" + std::to_string(sizeof(T)*8);
+        }
+        if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
     }
-    if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
-    // Assign incremental tensor id
-    this->tuid = std::to_string(__global_tensor_count) +
-        "_" + this->dtype +
-        "_" + "Tensor";
-    __global_tensor_count++;
-    // Offer ownership to global tensor map
-    __global_tensor_map<T>[this->tuid].reset(std::move(this));
-#ifdef RUN_METAL
-    if (!__global_metal_interface<T>)
-        __global_metal_interface<T>.reset(new TensorMetalWrapper<T>());
-    local_metal_interface = __global_metal_interface<T>;
-#endif
+
+    // Housekeeping
+    {
+        this->tuid = this->dtype +
+            "_" + std::to_string(__global_tensor_count) +
+            "_" + "Tensor";
+        __global_tensor_count++;
+        // Offer ownership to global tensor map
+        __global_tensor_map<T>[this->tuid].reset(std::move(this));
+    }
+}
+
+// FIXME
+template <typename T>
+void tensorlib::Tensor<T>::assign_device(const std::string& device_name) {
+    if (device_interfaces.empty()) {
+        device_interfaces["cpu"] = new tensorlib::Device("cpu");
+        device_interfaces["gpu"] = new tensorlib::Device("gpu");
+    }
+    if (device_interfaces.find(device_name) == device_interfaces.end())
+        throw std::runtime_error("device not implemented");
+    this->device = device_interfaces[device_name];
 }
 
 template <typename T>
 tensorlib::Tensor<T>::Tensor(Tensor& other) {
     throw std::runtime_error("Copying a tensor signifies destroying its history.");
+    /* TODO: it probably does not. How should a copy look like? Should the connections
+     * be backpropagated? Should the new tensor be a leaf? */
 }
 
 // Release from unique_ptr if being destroyed
@@ -132,7 +105,7 @@ inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
     result.parents = {a.tuid, b.tuid};
     result.realized = true;
     // If either tensor is on GPU, run the calculation on GPU
-    if (a.device == "gpu" || b.device == "gpu") {
+    if (a.device->name() == "gpu" || b.device->name() == "gpu") {
         a.to("gpu");
         b.to("gpu");
         // Allocate memory on gpu
@@ -141,7 +114,7 @@ inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
         result.realized = false;
         try {
 #ifdef RUN_METAL
-            local_metal_interface->enqueue_kernel({a.tuid, b.tuid},
+            device->get()->enqueue_kernel({a.tuid, b.tuid},
                     // Trying to follow a naming convention
                     // with the kernel names. The "_v_" is meant
                     // to indicate vector
@@ -164,7 +137,7 @@ template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
     Tensor<T> result = __binop_boilerplate(*this, other, "add");
     // If device is not cpu, assume execution handled
-    if (device != "cpu") return result;
+    if (device->name() != "cpu") return result;
     // CPU default implementation
     for (int i = 0; i < data.size(); ++i) {
         result.data[i] = this->data[i] + other.data[i];
@@ -175,7 +148,7 @@ Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator-(Tensor& other) {
     Tensor<T> result = __binop_boilerplate(*this, other, "sub");
-    if (device != "cpu") return result;
+    if (device->name() != "cpu") return result;
     // CPU default implementation
     for (int i = 0; i < data.size(); ++i) {
         result.data[i] = this->data[i] - other.data[i];
@@ -202,22 +175,22 @@ long long int tensorlib::Tensor<T>::get_mem_size() {
 }
 
 template <typename T>
-void tensorlib::Tensor<T>::to(const std::string& device) {
-    if (device != "cpu" && device != "gpu")
+void tensorlib::Tensor<T>::to(const std::string& device_name) {
+    if (device_name != "cpu" && device_name != "gpu")
         throw std::runtime_error("device not implemented");
-    if (device == "gpu") {
+    if (device_name == "gpu") {
         try {
 #ifdef RUN_METAL
-            local_metal_interface->assign(this->tuid, this->data);
+            device->get()->assign(this->tuid, get_raw_data_ptr(), get_mem_size());
 #else
             throw std::runtime_error("device not enabled");
 #endif
         } catch (std::runtime_error& e) {
-            std::cout << "Selected device \"" << device
+            std::cout << "Selected device \"" << device->name()
                 << "\" not found." << std::endl;
             std::cout << "Falling back to CPU." << std::endl;
             std::cerr << "Error: " << e.what() << std::endl;
-            this->device = "cpu";
+            assign_device("cpu");
             return;
         }
     } else {
@@ -228,16 +201,16 @@ void tensorlib::Tensor<T>::to(const std::string& device) {
         }
 #ifdef RUN_METAL
         // Copy memory into data vector
-        local_metal_interface->copy_to_host(this->tuid, this->data);
+        device->get()->copy_to_host(this->tuid, get_raw_data_ptr(), get_mem_size());
 #endif
     }
-    this->device = device;
+    assign_device(device_name);
 }
 
 template <typename T>
 void tensorlib::Tensor<T>::realize(bool force) {
     if (realized == true) return;
-    if (device == "cpu") {
+    if (device->name() == "cpu") {
         // TODO: can implement CPU parallelization
         // and buffer the calculations.
         // NOTE: Currently if not realized on CPU, it is an error
@@ -247,7 +220,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
         );
     }
     // Explicitly move tensor to device to force memory assignment
-    this->to(device);
+    this->to(device->name());
     // Check if parents are realized.
     bool parents_realized = true;
     for (auto& parent : parents) {
@@ -325,23 +298,23 @@ void tensorlib::Tensor<T>::realize(bool force) {
         // schedule realize on gpu as soon as you find a candidate,
         // but don't block the thread on it.
 #ifdef RUN_METAL
-        switch (local_metal_interface->get_cmdbuf_status(this->tuid)) {
-            case BUFFER_STATUS::IDLE:
-                local_metal_interface->schedule_realize(this->tuid);
+        switch (device->get()->get_cmdbuf_status(this->tuid)) {
+            case 2:
+                device->get()->schedule_realize(this->tuid);
                 this->queued_realization = true;
                 // Wait the thread for realization if forced
                 if (force == true) {
-                    local_metal_interface->wait_for(this->tuid);
+                    device->get()->wait_for(this->tuid);
                     this->realized = true;
                 }
                 break;
-            case BUFFER_STATUS::BUSY:
+            case 1:
                 break;
-            case BUFFER_STATUS::DONE:
+            case 0:
                 this->realized = true;
                 break;
             default:
-                throw std::runtime_error("Device " + this->device + " processing error.");
+                throw std::runtime_error("Device " + this->device->name() + " processing error.");
         }
 #else
         throw std::runtime_error("device not enabled");

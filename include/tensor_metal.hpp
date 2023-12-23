@@ -4,16 +4,15 @@
 #define CA_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
 
+#include <tensor_device_wrapper.hpp>
 #include <Metal.hpp>
 
 #include <map>
 #include <memory>
 
-const int ARRAY_LENGTH = 1024;
-const int BUFFER_SIZE = 1024;
+#include <utils.hpp>
 
-template <typename T>
-class TensorMetalWrapper {
+class TensorMetalWrapper : public TensorDeviceWrapper {
 public:
     MTL::Device* device;
     NS::AutoreleasePool* pool;
@@ -39,7 +38,11 @@ public:
         MTL::CommandBuffer* cmd_buf;
     } kernel_info;
     std::map<const std::string, kernel_info> tensor_cmdbuf_map;
-    void assign(const std::string& tuid, const std::vector<T>& data);
+
+    // Movement
+    void assign(const std::string& tuid, void* data, size_t mem_size);
+    void copy_to_host(const std::string& tuid, void* data, size_t mem_size);
+
     // tensor functions
     void enqueue_kernel(
             const std::vector<const std::string>& tuids,
@@ -48,11 +51,10 @@ public:
     std::vector<kernel_info> to_requeue;
     void requeue();
 
-        void schedule_realize(const std::string& tuid);
+    void schedule_realize(const std::string& tuid);
     void wait_for(const std::string& tuid);
-    void copy_to_host(const std::string& tuid, std::vector<T>& data);
 
-    tensorlib::BUFFER_STATUS get_cmdbuf_status(const std::string& tuid);
+    int get_cmdbuf_status(const std::string& tuid);
 };
 
 // TODO: Unable to separately compile

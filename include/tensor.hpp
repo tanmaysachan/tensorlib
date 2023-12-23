@@ -1,47 +1,22 @@
 #pragma once
+
+#define TENSORLIB_HPP
+
 #include <vector>
 #include <functional>
 #include <ostream>
 #include <memory>
 #include <map>
 
-// Initialize cout as debug stream
-// DBOUT << "statement"...
-#ifdef DEBUG
-    #define DBOUT std::cout << "DEBUG: "
-#else
-    #define DBOUT 0 && std::cout
-#endif
-
-// Initialize cout as verbose stream
-#ifdef VERBOSE
-    #define VOUT std::cout << "VERBOSE: "
-#else
-    #define VOUT 0 && std::cout
-#endif
-
-// CPU parallelization
-#ifndef NTHREADS
-    #define NTHREADS 1
-#endif
+#include <device.hpp>
+#include <utils.hpp>
 
 namespace tensorlib {
     template <typename T>
     class Tensor;
-    // Used for GPU status tracking
-    // Wrappers to convert their status to these values
-    enum class BUFFER_STATUS {
-        IDLE,
-        BUSY,
-        DONE,
-        ERROR,
-    };
     // Keep track of all tensors created, and useful for unique id generation
     long long int __global_tensor_count = 0;
     // Helpful for ownership management.
-    // Tensors offer their ownership to this map through unique_ptr
-    // (However the unique_ptr must be released if a tensor is destroyed prematurely,
-    // see the destructor tensorlib::Tensor<T>::~Tensor())
     // For passing tensors around, we use strings
     template <typename T>
     std::map<std::string, std::unique_ptr<Tensor<T>>> __global_tensor_map;
@@ -50,19 +25,13 @@ namespace tensorlib {
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const tensorlib::Tensor<T>& tensor);
 
-#ifdef RUN_METAL
-#include "tensor_metal.hpp"
-#endif
-
 namespace tensorlib {
 
-// GPU interfaces
-// TODO: Make this generic
-// I don't have any other device, but would be good if its extensible.
-#ifdef RUN_METAL
-template <typename T>
-std::shared_ptr<TensorMetalWrapper<T>> __global_metal_interface;
-#endif
+// Device interfaces
+//
+// Exact interfaces are defined in device.hpp
+// Initialized on first use.
+std::unordered_map<std::string, Device*> device_interfaces;
 
 template <typename T>
 class Tensor {
@@ -71,15 +40,13 @@ class Tensor {
     std::function<T(T)> grad_fn;
     std::vector<std::string> parents;
 
-#ifdef RUN_METAL
-    std::shared_ptr<TensorMetalWrapper<T>> local_metal_interface;
-#endif
-
+    // UNSAFE
+    void* get_raw_data_ptr();
 public:
     std::vector<T> data;
     std::vector<int> shape;
     std::string dtype;
-    std::string device;
+    Device* device;
     // tensor unique id
     std::string tuid;
     bool requires_grad;
@@ -95,7 +62,7 @@ public:
         std::vector<int>const& shape,
         bool requires_grad = true,
         const std::string& dtype = "none",
-        const std::string& device = "cpu");
+        const std::string& device_name = "cpu");
 
     Tensor(Tensor<T>& other); // Copy constructor
 
@@ -131,11 +98,12 @@ public:
 
     /* Tensor utils */
     long long int get_mem_size();
-    void to(const std::string& device);
+    void to(const std::string& device_name);
     // Realize the tensor.
     // force = true makes the thread wait
     // until the tensor is realized.
     void realize(bool force = false);
+    void assign_device(const std::string& device_name);
 };
 
 } // namespace TensorLib

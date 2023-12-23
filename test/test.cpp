@@ -3,9 +3,11 @@
 
 using namespace tensorlib;
 
-#define IS_TRUE(x) {                                                              \
-    if (!(x))                                                                     \
-        std::cout << __FUNCTION__ << " failed on line " << __LINE__ << std::endl; \
+#define IS_TRUE(x, fn) {                                            \
+    if (!(x))                                                       \
+        std::cout << fn << " \033[1;31mfailed\033[0m" << std::endl; \
+    else                                                            \
+        std::cout << fn << " \033[1;32mpassed\033[0m" << std::endl; \
 }
 
 /* include TEST files */

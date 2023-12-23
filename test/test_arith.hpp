@@ -46,9 +46,23 @@ bool test_add_float_gpu() {
     return t2 == t3;
 }
 
+bool test_sub_gpu() {
+    Tensor<float> t0({1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor<float> t1({1, 2, 3, 4, 5, 6}, {2, 3});
+    t0.to("gpu");
+    t1.to("gpu");
+    Tensor<float> t2 = t0 - t1;
+    Tensor<float> t3({0, 0, 0, 0, 0, 0}, {2, 3});
+    t2.to("cpu");
+    return t2 == t3;
+}
+
+// ADD TESTS TO THIS MACRO
 #define RUN_ARITH_TESTS() \
-    IS_TRUE(test_add()); \
-    IS_TRUE(test_add_gpu()); \
-    IS_TRUE(test_add_gpu_cpu()); \
-    IS_TRUE(test_add_float()); \
-    IS_TRUE(test_add_float_gpu()); \
+    IS_TRUE(test_add(), "test_add"); \
+    IS_TRUE(test_add_gpu(), "test_add_gpu"); \
+    IS_TRUE(test_add_gpu_cpu(), "test_add_gpu_cpu"); \
+    IS_TRUE(test_add_float(), "test_add_float"); \
+    IS_TRUE(test_add_float_gpu(), "test_add_float_gpu"); \
+    IS_TRUE(test_sub_gpu(), "test_sub_gpu"); \
+    std::cout << "arith tests finished ✓" << std::endl;

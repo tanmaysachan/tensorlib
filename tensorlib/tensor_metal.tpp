@@ -1,7 +1,6 @@
 #include <iostream>
 
-template <typename T>
-TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
+TensorMetalWrapper::TensorMetalWrapper(MTL::Device* device)
 {
     DBOUT << "Initializing TensorMetalWrapper" << std::endl;
     pool = NS::AutoreleasePool::alloc()->init();
@@ -39,30 +38,43 @@ TensorMetalWrapper<T>::TensorMetalWrapper(MTL::Device* device)
     command_queue = this->device->newCommandQueue();
 }
 
-template <typename T>
-TensorMetalWrapper<T>::~TensorMetalWrapper() {
+TensorMetalWrapper::~TensorMetalWrapper() {
     // print typename
     pool->release();
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::assign(const std::string& tuid, const std::vector<T>& data) {
+void TensorMetalWrapper::assign(const std::string& tuid,
+                                void* raw_data,
+                                size_t mem_size) {
+    // Make sense of the raw pointer
+    uint8_t* data = static_cast<uint8_t*>(raw_data);
     // Allot memory, map to tuid, copy data
     if (tensor_membuf_map.find(tuid) != tensor_membuf_map.end()) return;
 
-    MTL::Buffer* newbuf = device->newBuffer(data.size()*sizeof(T), MTL::ResourceStorageModePrivate);
+    MTL::Buffer* newbuf = device->newBuffer(mem_size, MTL::ResourceStorageModePrivate);
     if (!newbuf) {
         VOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
     }
     tensor_membuf_map.insert(std::make_pair(tuid, newbuf));
 
-    T* device_data = (T*) newbuf->contents();
-    for (unsigned long int index = 0; index < data.size(); ++index)
+    size_t bytes = mem_size / sizeof(uint8_t);
+    uint8_t* device_data = (uint8_t*) newbuf->contents();
+    for (unsigned long int index = 0; index < bytes; ++index)
         device_data[index] = data[index];
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::enqueue_kernel(
+void TensorMetalWrapper::copy_to_host(const std::string& tuid,
+                                      void* raw_data,
+                                      size_t mem_size) {
+    uint8_t* data = static_cast<uint8_t*>(raw_data);
+    MTL::Buffer* buf = tensor_membuf_map.at(tuid);
+    size_t bytes = mem_size / sizeof(uint8_t);
+    uint8_t* device_data = (uint8_t*) buf->contents();
+    for (unsigned long int index = 0; index < bytes; ++index)
+        data[index] = device_data[index];
+}
+
+void TensorMetalWrapper::enqueue_kernel(
         const std::vector<const std::string>& tuids,
         const std::string& rtuid,
         const std::string& fn_name) {
@@ -103,15 +115,13 @@ void TensorMetalWrapper<T>::enqueue_kernel(
     }));
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::requeue() {
+void TensorMetalWrapper::requeue() {
     for (auto it : to_requeue) {
         enqueue_kernel(it.parent_tuids, it.rtuid, it.fn_name);
     }
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::schedule_realize(const std::string& tuid) {
+void TensorMetalWrapper::schedule_realize(const std::string& tuid) {
     try {
         auto __kernel_info = tensor_cmdbuf_map.at(tuid);
         __kernel_info.cmd_buf->commit();
@@ -121,8 +131,7 @@ void TensorMetalWrapper<T>::schedule_realize(const std::string& tuid) {
     }
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::wait_for(const std::string& tuid) {
+void TensorMetalWrapper::wait_for(const std::string& tuid) {
     try {
         auto cmd_buf = tensor_cmdbuf_map.at(tuid).cmd_buf;
         cmd_buf->waitUntilCompleted();
@@ -131,32 +140,26 @@ void TensorMetalWrapper<T>::wait_for(const std::string& tuid) {
     }
 }
 
-template <typename T>
-void TensorMetalWrapper<T>::copy_to_host(const std::string& tuid, std::vector<T>& data) {
-    MTL::Buffer* buf = tensor_membuf_map.at(tuid);
-    T* device_data = (T*) buf->contents();
-    for (unsigned long int index = 0; index < data.size(); ++index)
-        data[index] = device_data[index];
-}
-
-template <typename T>
-tensorlib::BUFFER_STATUS TensorMetalWrapper<T>::get_cmdbuf_status(const std::string& tuid) {
+int TensorMetalWrapper::get_cmdbuf_status(const std::string& tuid) {
     auto cmd_buf = tensor_cmdbuf_map.at(tuid).cmd_buf;
-    // Convert MTL statuses to tensorlib statuses
+    // 0 - Completed
+    // 1 - Busy
+    // 2 - Idle
+    // -1 - Error
     switch (cmd_buf->status()) {
         case MTL::CommandBufferStatusNotEnqueued:
-            return tensorlib::BUFFER_STATUS::IDLE;
+            return 1;
         case MTL::CommandBufferStatusEnqueued:
-            return tensorlib::BUFFER_STATUS::BUSY;
+            return 2;
         case MTL::CommandBufferStatusCommitted:
-            return tensorlib::BUFFER_STATUS::BUSY;
+            return 2;
         case MTL::CommandBufferStatusScheduled:
-            return tensorlib::BUFFER_STATUS::BUSY;
+            return 2;
         case MTL::CommandBufferStatusCompleted:
-            return tensorlib::BUFFER_STATUS::DONE;
+            return 0;
         case MTL::CommandBufferStatusError:
-            return tensorlib::BUFFER_STATUS::ERROR;
+            return -1;
         default:
-            return tensorlib::BUFFER_STATUS::ERROR;
+            return -1;
     }
 }
