@@ -1,6 +1,7 @@
 #include <tensor.hpp>
 #include <iostream>
 
+using namespace std;
 using namespace tensorlib;
 
 #define IS_TRUE(x, fn) {                                            \

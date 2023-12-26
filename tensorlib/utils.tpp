@@ -1,7 +1,4 @@
 #include <iostream>
-#include <utils.hpp>
-
-namespace tensorlib {}
 
 template<typename T>
 void __print_util(std::ostream& os,
@@ -34,10 +31,10 @@ template <typename T>
 std::ostream& operator<<(std::ostream& os, tensorlib::Tensor<T>& tensor) {
     // Only print if on CPU
     os << "Tensor(";
-    if (tensor.device == "cpu")
+    if (tensor.device->name() == "cpu")
         __print_util(os, tensor, 0, 0, tensor.data.size());
     else
         os << "<unrealized>";
-    os << ", dtype=" << tensor.dtype << ", device=" << tensor.device << ")";
+    os << ", dtype=" << tensor.dtype << ", device=" << tensor.device->name() << ")";
     return os;
 }

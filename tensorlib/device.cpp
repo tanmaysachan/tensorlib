@@ -8,11 +8,13 @@ void tensorlib::Device::set_interface(const std::string& device) {
     if (device == "cpu") {
         /* device_interface = new TensorCPUWrapper(); */
     } else if (device == "gpu") {
+        auto gpu_wrapper = std::unique_ptr<TensorDeviceWrapper>();
 #ifdef RUN_METAL
-        device_interface = new TensorMetalWrapper();
+        gpu_wrapper.reset(new TensorMetalWrapper());
 #else
         // Other devices...
 #endif
+        this->device_interface = std::move(gpu_wrapper);
     } else {
         throw std::runtime_error("Unknown device: " + device);
     }

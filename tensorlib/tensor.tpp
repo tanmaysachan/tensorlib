@@ -21,16 +21,15 @@ tensorlib::Tensor<T>::Tensor(
     std::vector<int>const& shape,
     bool requires_grad,
     const std::string& dtype,
-    const std::string& device)
+    const std::string& device_name)
     :   data(std::move(data)),
         shape(std::move(shape)),
         requires_grad(requires_grad) {
     assert(this->data.size() == std::accumulate(this->shape.begin(),
            this->shape.end(),
            1, std::multiplies<int>()));
-    // Lazy assignment, not moved yet.
-    // Will be moved to device if requested through realize()
-    assign_device(device);
+    // Initialize devices, switch current device
+    switch_device_to(device_name);
 
     // infer dtype if none
     {
@@ -52,37 +51,25 @@ tensorlib::Tensor<T>::Tensor(
     // Housekeeping
     {
         this->tuid = this->dtype +
-            "_" + std::to_string(__global_tensor_count) +
+            "_" + std::to_string(global_tensor_count) +
             "_" + "Tensor";
-        __global_tensor_count++;
+        global_tensor_count++;
         // Offer ownership to global tensor map
-        __global_tensor_map<T>[this->tuid].reset(std::move(this));
+        global_tensor_map<T>[this->tuid].reset(std::move(this));
     }
-}
-
-// FIXME
-template <typename T>
-void tensorlib::Tensor<T>::assign_device(const std::string& device_name) {
-    if (device_interfaces.empty()) {
-        device_interfaces["cpu"] = new tensorlib::Device("cpu");
-        device_interfaces["gpu"] = new tensorlib::Device("gpu");
-    }
-    if (device_interfaces.find(device_name) == device_interfaces.end())
-        throw std::runtime_error("device not implemented");
-    this->device = device_interfaces[device_name];
 }
 
 template <typename T>
 tensorlib::Tensor<T>::Tensor(Tensor& other) {
     throw std::runtime_error("Copying a tensor signifies destroying its history.");
-    /* TODO: it probably does not. How should a copy look like? Should the connections
-     * be backpropagated? Should the new tensor be a leaf? */
+    // TODO: it probably does not. How should a copy look like?
+    //  Should the connections be backpropagated? Should the new tensor be a leaf?
 }
 
 // Release from unique_ptr if being destroyed
 template <typename T>
 tensorlib::Tensor<T>::~Tensor() {
-    __global_tensor_map<T>[this->tuid].release();
+    global_tensor_map<T>[this->tuid].release();
 }
 
 /* ----------------------
@@ -175,13 +162,26 @@ long long int tensorlib::Tensor<T>::get_mem_size() {
 }
 
 template <typename T>
+void tensorlib::Tensor<T>::switch_device_to(const std::string& device_name) {
+    // Initialize once (TODO: can i remove this?)
+    if (device_interfaces.empty()) {
+        device_interfaces["cpu"] = new tensorlib::Device("cpu");
+        device_interfaces["gpu"] = new tensorlib::Device("gpu");
+    }
+    if (device_interfaces.find(device_name) == device_interfaces.end())
+        throw std::runtime_error("device not implemented");
+    this->device = device_interfaces[device_name];
+}
+
+template <typename T>
 void tensorlib::Tensor<T>::to(const std::string& device_name) {
     if (device_name != "cpu" && device_name != "gpu")
         throw std::runtime_error("device not implemented");
     if (device_name == "gpu") {
         try {
 #ifdef RUN_METAL
-            device->get()->assign(this->tuid, get_raw_data_ptr(), get_mem_size());
+            auto new_device = device_interfaces[device_name];
+            new_device->get()->assign(this->tuid, get_raw_data_ptr(), get_mem_size());
 #else
             throw std::runtime_error("device not enabled");
 #endif
@@ -190,7 +190,7 @@ void tensorlib::Tensor<T>::to(const std::string& device_name) {
                 << "\" not found." << std::endl;
             std::cout << "Falling back to CPU." << std::endl;
             std::cerr << "Error: " << e.what() << std::endl;
-            assign_device("cpu");
+            switch_device_to("cpu");
             return;
         }
     } else {
@@ -204,7 +204,7 @@ void tensorlib::Tensor<T>::to(const std::string& device_name) {
         device->get()->copy_to_host(this->tuid, get_raw_data_ptr(), get_mem_size());
 #endif
     }
-    assign_device(device_name);
+    switch_device_to(device_name);
 }
 
 template <typename T>
@@ -225,7 +225,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
     bool parents_realized = true;
     for (auto& parent : parents) {
         // Parents are tuids, get tensor ptr from global map
-        auto& pt = __global_tensor_map<T>[parent];
+        auto& pt = global_tensor_map<T>[parent];
         if (pt->realized == false) {
             parents_realized = false;
             break;
@@ -239,7 +239,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
     if (parents_realized == false) {
         std::mutex lock;
         auto tree_search = [&lock] (const std::string& tuid) {
-            auto& cur = __global_tensor_map<T>[tuid];
+            auto& cur = global_tensor_map<T>[tuid];
             // Keep performing parallel BFS search on the graph.
 
             // Reference wrapper lets you store references in containers.
@@ -266,7 +266,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
                     // Check if parents are realized.
                     bool parents_realized = true;
                     for (auto& parent : tensor_ptr->parents) {
-                        auto& parent_pt = __global_tensor_map<T>[parent];
+                        auto& parent_pt = global_tensor_map<T>[parent];
                         if (parent_pt->realized == false) {
                             parents_realized = false;
                             to_process.insert({parent, parent_pt});
@@ -299,7 +299,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
         // but don't block the thread on it.
 #ifdef RUN_METAL
         switch (device->get()->get_cmdbuf_status(this->tuid)) {
-            case 2:
+            case 1:
                 device->get()->schedule_realize(this->tuid);
                 this->queued_realization = true;
                 // Wait the thread for realization if forced
@@ -308,7 +308,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
                     this->realized = true;
                 }
                 break;
-            case 1:
+            case 2:
                 break;
             case 0:
                 this->realized = true;

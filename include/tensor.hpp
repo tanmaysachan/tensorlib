@@ -2,36 +2,17 @@
 
 #define TENSORLIB_HPP
 
+#include <tensorlib.hpp>
+#include <device.hpp>
+#include <utils.hpp>
+
 #include <vector>
 #include <functional>
 #include <ostream>
 #include <memory>
 #include <map>
 
-#include <device.hpp>
-#include <utils.hpp>
-
 namespace tensorlib {
-    template <typename T>
-    class Tensor;
-    // Keep track of all tensors created, and useful for unique id generation
-    long long int __global_tensor_count = 0;
-    // Helpful for ownership management.
-    // For passing tensors around, we use strings
-    template <typename T>
-    std::map<std::string, std::unique_ptr<Tensor<T>>> __global_tensor_map;
-}
-
-template <typename T>
-std::ostream& operator<<(std::ostream& os, const tensorlib::Tensor<T>& tensor);
-
-namespace tensorlib {
-
-// Device interfaces
-//
-// Exact interfaces are defined in device.hpp
-// Initialized on first use.
-std::unordered_map<std::string, Device*> device_interfaces;
 
 template <typename T>
 class Tensor {
@@ -47,22 +28,24 @@ public:
     std::vector<int> shape;
     std::string dtype;
     Device* device;
+
     // tensor unique id
     std::string tuid;
     bool requires_grad;
+
     // By default user-created tensors are fully "realized", i.e.
     // They do not need any processing. However, tensors created
     // through operations are not, they need to be realized to have
-    // value. This is done to make gpu ops easily parallelizable.
+    // value.
     bool realized = true;
     // Helpful for GPU scheduling
     bool queued_realization = false;
 
     Tensor(std::vector<T>const& data,
-        std::vector<int>const& shape,
-        bool requires_grad = true,
-        const std::string& dtype = "none",
-        const std::string& device_name = "cpu");
+           std::vector<int>const& shape,
+           bool requires_grad = true,
+           const std::string& dtype = "none",
+           const std::string& device_name = "cpu");
 
     Tensor(Tensor<T>& other); // Copy constructor
 
@@ -103,7 +86,7 @@ public:
     // force = true makes the thread wait
     // until the tensor is realized.
     void realize(bool force = false);
-    void assign_device(const std::string& device_name);
+    void switch_device_to(const std::string& device_name);
 };
 
 } // namespace TensorLib

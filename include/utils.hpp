@@ -36,3 +36,6 @@ void __print_util(std::ostream& os,
 
 template <typename T>
 std::ostream& operator<<(std::ostream& os, tensorlib::Tensor<T>& tensor);
+
+// Template file
+#include <utils.tpp>

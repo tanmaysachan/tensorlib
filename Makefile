@@ -24,7 +24,7 @@ else
 	DEFINES += -DNTHREADS=1
 endif
 
-test: build/default.metallib build/device.o build/utils.o build/test.o
+test: build/default.metallib build/device.o build/test.o
 	$(CXX) $(CXXFLAGS) $(BUILD_DIR)/*.o -o run_tests $(FRAMEWORKS) $(SANITIZE)
 
 build/%.o: tensorlib/%.cpp
@@ -44,3 +44,5 @@ clean:
 build: test
 
 rebuild: clean build
+
+all: clean build

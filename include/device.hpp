@@ -3,6 +3,8 @@
  * Due to duplicate symbols, ensure the Metal.hpp file
  * is not included in the same translation unit as tensorlib.
  */
+#pragma once
+#include <memory>
 
 #ifdef TENSORLIB_HPP
     #include <tensor_device_wrapper.hpp>
@@ -17,11 +19,11 @@ namespace tensorlib {
 
 class Device {
     const std::string _name;
-    TensorDeviceWrapper* device_interface;
+    std::unique_ptr<TensorDeviceWrapper> device_interface;
 public:
     Device(const std::string& name);
     std::string name() const { return _name; }
-    TensorDeviceWrapper* get() const { return device_interface; }
+    std::unique_ptr<TensorDeviceWrapper>& get() { return device_interface; }
     void set_interface(const std::string& device);
 };
 

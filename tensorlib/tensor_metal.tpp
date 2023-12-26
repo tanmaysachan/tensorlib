@@ -1,7 +1,6 @@
 #include <iostream>
 
-TensorMetalWrapper::TensorMetalWrapper(MTL::Device* device)
-{
+TensorMetalWrapper::TensorMetalWrapper(MTL::Device* device) {
     DBOUT << "Initializing TensorMetalWrapper" << std::endl;
     pool = NS::AutoreleasePool::alloc()->init();
     if (device)
@@ -27,6 +26,9 @@ TensorMetalWrapper::TensorMetalWrapper(MTL::Device* device)
         "sub_v_f32",
         "sub_v_i32",
         "sub_v_i64",
+        "mul_m_f32",
+        "mul_m_i32",
+        "mul_m_i64",
     };
     NS::Error* error;
     for (auto func: shader_functions) {
@@ -48,12 +50,13 @@ void TensorMetalWrapper::assign(const std::string& tuid,
                                 size_t mem_size) {
     // Make sense of the raw pointer
     uint8_t* data = static_cast<uint8_t*>(raw_data);
+
     // Allot memory, map to tuid, copy data
     if (tensor_membuf_map.find(tuid) != tensor_membuf_map.end()) return;
 
     MTL::Buffer* newbuf = device->newBuffer(mem_size, MTL::ResourceStorageModePrivate);
     if (!newbuf) {
-        VOUT << "Failed to allocate memory for tensor id \"" << tuid << "\"" << std::endl;
+        throw std::runtime_error("Failed to allocate memory for a tensor");
     }
     tensor_membuf_map.insert(std::make_pair(tuid, newbuf));
 
@@ -79,11 +82,10 @@ void TensorMetalWrapper::enqueue_kernel(
         const std::string& rtuid,
         const std::string& fn_name) {
     MTL::CommandBuffer* cmd_buf = command_queue->commandBuffer();
-    if (!cmd_buf)
-        VOUT << "Failed to create command buffer on metal gpu." << std::endl;
+    if (!cmd_buf) throw std::runtime_error("Failed to create command buffer on gpu.");
+
     MTL::ComputeCommandEncoder* encoder = cmd_buf->computeCommandEncoder();
-    if (!encoder)
-        VOUT << "Failed to create command encoder on metal gpu." << std::endl;
+    if (!encoder) throw std::runtime_error("Failed to create command encoder on gpu.");
 
     auto fn = compute_functions[fn_name];
     encoder->setComputePipelineState(fn);
@@ -123,9 +125,9 @@ void TensorMetalWrapper::requeue() {
 
 void TensorMetalWrapper::schedule_realize(const std::string& tuid) {
     try {
-        auto __kernel_info = tensor_cmdbuf_map.at(tuid);
-        __kernel_info.cmd_buf->commit();
-        to_requeue.push_back(__kernel_info);
+        auto kinfo = tensor_cmdbuf_map.at(tuid);
+        kinfo.cmd_buf->commit();
+        to_requeue.push_back(kinfo);
     } catch (std::out_of_range& e) {
         VOUT << "Stray tensor being realized? tuid - " << tuid << std::endl;
     }
@@ -143,8 +145,8 @@ void TensorMetalWrapper::wait_for(const std::string& tuid) {
 int TensorMetalWrapper::get_cmdbuf_status(const std::string& tuid) {
     auto cmd_buf = tensor_cmdbuf_map.at(tuid).cmd_buf;
     // 0 - Completed
-    // 1 - Busy
-    // 2 - Idle
+    // 1 - Idle
+    // 2 - Busy
     // -1 - Error
     switch (cmd_buf->status()) {
         case MTL::CommandBufferStatusNotEnqueued:
