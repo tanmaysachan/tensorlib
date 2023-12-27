@@ -23,19 +23,16 @@
 #include <map>
 
 namespace tensorlib {
-    template <typename T>
     class Tensor;
 }
 
-template<typename T>
 void __print_util(std::ostream& os,
-        const tensorlib::Tensor<T>& tensor,
+        const tensorlib::Tensor& tensor,
         int shape_idx,
         int offset,
         int par_size);
 
-template <typename T>
-std::ostream& operator<<(std::ostream& os, tensorlib::Tensor<T>& tensor);
+std::ostream& operator<<(std::ostream& os, tensorlib::Tensor& tensor);
 
 // Template file
-#include <utils.tpp>
+/* #include <utils.tpp> */

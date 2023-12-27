@@ -1,1 +1,2 @@
-1. remove dtype (why? you have T)
+1. Fix dtype class
+2. Fix utils

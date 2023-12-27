@@ -1,8 +1,7 @@
 #include <iostream>
 
-template<typename T>
 void __print_util(std::ostream& os,
-        const tensorlib::Tensor<T>& tensor,
+        const tensorlib::Tensor& tensor,
         int shape_idx,
         int offset,
         int par_size) {
@@ -27,8 +26,7 @@ void __print_util(std::ostream& os,
     os << "]";
 }
 
-template <typename T>
-std::ostream& operator<<(std::ostream& os, tensorlib::Tensor<T>& tensor) {
+std::ostream& operator<<(std::ostream& os, tensorlib::Tensor& tensor) {
     // Only print if on CPU
     os << "Tensor(";
     if (tensor.device->name() == "cpu")

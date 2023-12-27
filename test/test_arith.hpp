@@ -1,60 +1,60 @@
 bool test_add() {
     DISABLE_TEST();
-    Tensor<int> t0({1, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<int> t1({1, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<int> t2 = t0 + t1;
-    Tensor<int> t3({2, 4, 6, 8, 10, 12}, {2, 3});
+    Tensor t0(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t2 = t0 + t1;
+    Tensor t3(vector<int>{2, 4, 6, 8, 10, 12}, {2, 3});
     return t2 == t3;
 }
 
 bool test_add_gpu() {
-    Tensor<int> t0({1, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<int> t1({1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t0(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
     t0.to("gpu");
     t1.to("gpu");
-    Tensor<int> t2 = t0 + t1;
-    Tensor<int> t3({2, 4, 6, 8, 10, 12}, {2, 3});
+    Tensor t2 = t0 + t1;
+    Tensor t3(vector<int>{2, 4, 6, 8, 10, 12}, {2, 3});
     t2.to("cpu");
     return t2 == t3;
 }
 
 bool test_add_gpu_cpu() {
-    Tensor<int> t0({1, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<int> t1({1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t0(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<int>{1, 2, 3, 4, 5, 6}, {2, 3});
     t0.to("gpu");
-    Tensor<int> t2 = t0 + t1;
-    Tensor<int> t3({2, 4, 6, 8, 10, 12}, {2, 3});
+    Tensor t2 = t0 + t1;
+    Tensor t3(vector<int>{2, 4, 6, 8, 10, 12}, {2, 3});
     t2.to("cpu");
     return t2 == t3;
 }
 
 bool test_add_float() {
     DISABLE_TEST();
-    Tensor<float> t0({1.2, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<float> t1({1, 2.3, 3, 4, 5, 6}, {2, 3});
-    Tensor<float> t2 = t0 + t1;
-    Tensor<float> t3({2.2, 4.3, 6, 8, 10, 12}, {2, 3});
+    Tensor t0(vector<float>{1.2, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<float>{1, 2.3, 3, 4, 5, 6}, {2, 3});
+    Tensor t2 = t0 + t1;
+    Tensor t3(vector<float>{2.2, 4.3, 6, 8, 10, 12}, {2, 3});
     return t2 == t3;
 }
 
 bool test_add_float_gpu() {
-    Tensor<float> t0({1.2, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<float> t1({1, 2.3, 3, 4, 5, 6}, {2, 3});
+    Tensor t0(vector<float>{1.2, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<float>{1, 2.3, 3, 4, 5, 6}, {2, 3});
     t0.to("gpu");
     t1.to("gpu");
-    Tensor<float> t2 = t0 + t1;
-    Tensor<float> t3({2.2, 4.3, 6, 8, 10, 12}, {2, 3});
+    Tensor t2 = t0 + t1;
+    Tensor t3(vector<float>{2.2, 4.3, 6, 8, 10, 12}, {2, 3});
     t2.to("cpu");
     return t2 == t3;
 }
 
 bool test_sub_gpu() {
-    Tensor<float> t0({1, 2, 3, 4, 5, 6}, {2, 3});
-    Tensor<float> t1({1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t0(vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
+    Tensor t1(vector<float>{1, 2, 3, 4, 5, 6}, {2, 3});
     t0.to("gpu");
     t1.to("gpu");
-    Tensor<float> t2 = t0 - t1;
-    Tensor<float> t3({0, 0, 0, 0, 0, 0}, {2, 3});
+    Tensor t2 = t0 - t1;
+    Tensor t3(vector<float>{0, 0, 0, 0, 0, 0}, {2, 3});
     t2.to("cpu");
     return t2 == t3;
 }

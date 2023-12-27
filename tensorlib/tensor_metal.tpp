@@ -38,6 +38,8 @@ TensorMetalWrapper::TensorMetalWrapper(MTL::Device* device) {
         compute_functions.insert(std::make_pair(func, pipeline_state));
     }
     command_queue = this->device->newCommandQueue();
+    if (!command_queue)
+        throw std::runtime_error("Failed to initialize metal command queue");
 }
 
 TensorMetalWrapper::~TensorMetalWrapper() {
