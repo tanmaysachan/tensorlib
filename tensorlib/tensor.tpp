@@ -48,6 +48,9 @@ tensorlib::Tensor<T>::Tensor(
 
     // Housekeeping
     {
+        // Create new context, move ownership of important vectors.
+        context.reset(new TensorPassingContext());
+
         context->dtype = _dtype;
         context->tuid = _dtype +
             "_" + std::to_string(global_tensor_count) +
@@ -57,8 +60,6 @@ tensorlib::Tensor<T>::Tensor(
         // Offer ownership to global tensor map
         global_tensor_map<T>[this->tuid()].reset(std::move(this));
 
-        // Create new context, move ownership of important vectors.
-        context.reset(new TensorPassingContext());
         context->shape = shape;
         // Default strides
         context->strides = std::vector<int>(shape.size(), 1);
@@ -67,6 +68,8 @@ tensorlib::Tensor<T>::Tensor(
         size_t bytes = data.size() * sizeof(T);
         context->data = std::vector<uint8_t>(bytes);
         std::memcpy(context->data.data(), raw_data, bytes);
+
+        context->parents = std::vector<std::string>();
     }
 }
 
@@ -96,11 +99,13 @@ inline Tensor<T> tensorlib::Tensor<T>::binop_boilerplate(
         const std::string& op_name) {
 
     // Tensor for storing results
+    int num_elements = std::accumulate(a.shape().begin(),
+            a.shape().end(), 1, std::multiplies<int>());
     Tensor<T> result = Tensor<T>(
-        std::vector<T>(a.data().size()),
+        std::vector<T>(num_elements),
         std::vector<int>(a.shape()),
         a.requires_grad, a.dtype(), "cpu");
-    result.parents = {a.tuid(), b.tuid()};
+    result.context->parents = {a.tuid(), b.tuid()};
     result.realized = true;
     // If either tensor is on GPU, run the calculation on GPU
     if (a.device->name() == "gpu" || b.device->name() == "gpu") {
@@ -134,33 +139,18 @@ inline Tensor<T> tensorlib::Tensor<T>::binop_boilerplate(
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
     Tensor<T> result = binop_boilerplate(*this, other, "add");
-    // If device is not cpu, assume execution handled
-    if (device->name() != "cpu") return result;
-    // CPU default implementation
-    for (int i = 0; i < data.size(); ++i) {
-        result.data[i] = this->data[i] + other.data[i];
-    }
     return result;
 }
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator-(Tensor& other) {
     Tensor<T> result = binop_boilerplate(*this, other, "sub");
-    if (device->name() != "cpu") return result;
-    // CPU default implementation
-    for (int i = 0; i < data.size(); ++i) {
-        result.data[i] = this->data[i] - other.data[i];
-    }
     return result;
 }
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator*(Tensor& other) {
     Tensor<T> result = binop_boilerplate(*this, other, "mul");
-    // CPU default implementation
-    for (int i = 0; i < data.size(); ++i) {
-        result.data[i] = this->data[i] * other.data[i];
-    }
     return result;
 }
 
@@ -169,7 +159,7 @@ Tensor<T> tensorlib::Tensor<T>::operator*(Tensor& other) {
  * ---------------------- */
 template <typename T>
 long long int tensorlib::Tensor<T>::get_mem_size() {
-    return data.size() * sizeof(T);
+    return context->data.size();
 }
 
 template <typename T>
@@ -234,7 +224,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
     this->to(device->name());
     // Check if parents are realized.
     bool parents_realized = true;
-    for (auto& parent : context.parents) {
+    for (auto& parent : context->parents) {
         // Parents are tuids, get tensor ptr from global map
         auto& pt = global_tensor_map<T>[parent];
         if (pt->realized == false) {
@@ -276,7 +266,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
                     }
                     // Check if parents are realized.
                     bool parents_realized = true;
-                    for (auto& parent : tensor_ptr->context.parents) {
+                    for (auto& parent : tensor_ptr->context->parents) {
                         auto& parent_pt = global_tensor_map<T>[parent];
                         if (parent_pt->realized == false) {
                             parents_realized = false;

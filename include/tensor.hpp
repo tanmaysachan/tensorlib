@@ -61,7 +61,7 @@ public:
     /* TODO: to be used for testing only right now. Equality checks on tensor
      * would be much more complicated than this. */
     friend bool operator==(const Tensor<T>& a, const Tensor<T>& b) {
-        return a.data() == b.data() && a.shape() == b.shape() && a.dtype() == b.dtype();
+        return a.context->data == b.context->data && a.shape() == b.shape() && a.dtype() == b.dtype();
     }
 
     /* getters */

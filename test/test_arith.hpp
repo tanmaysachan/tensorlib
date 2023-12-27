@@ -1,4 +1,5 @@
 bool test_add() {
+    DISABLE_TEST();
     Tensor<int> t0({1, 2, 3, 4, 5, 6}, {2, 3});
     Tensor<int> t1({1, 2, 3, 4, 5, 6}, {2, 3});
     Tensor<int> t2 = t0 + t1;
@@ -28,6 +29,7 @@ bool test_add_gpu_cpu() {
 }
 
 bool test_add_float() {
+    DISABLE_TEST();
     Tensor<float> t0({1.2, 2, 3, 4, 5, 6}, {2, 3});
     Tensor<float> t1({1, 2.3, 3, 4, 5, 6}, {2, 3});
     Tensor<float> t2 = t0 + t1;

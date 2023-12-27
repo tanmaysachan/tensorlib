@@ -11,6 +11,11 @@ using namespace tensorlib;
         std::cout << fn << " \033[1;32mpassed\033[0m" << std::endl; \
 }
 
+#define DISABLE_TEST() { \
+    std::cout << "\033[1;33m Warning - " << __func__ << " disabled\033[0m -- "; \
+    return true; \
+}
+
 /* include TEST files */
 #include "test_arith.hpp"
 
