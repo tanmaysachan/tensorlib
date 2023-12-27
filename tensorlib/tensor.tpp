@@ -12,7 +12,7 @@ namespace tensorlib {
 // UNSAFE
 template <typename T>
 void* tensorlib::Tensor<T>::get_raw_data_ptr() {
-    return static_cast<void*>(data.data());
+    return static_cast<void*>(context->data.data());
 }
 
 template <typename T>
@@ -22,40 +22,51 @@ tensorlib::Tensor<T>::Tensor(
     bool requires_grad,
     const std::string& dtype,
     const std::string& device_name)
-    :   data(std::move(data)),
-        shape(std::move(shape)),
-        requires_grad(requires_grad) {
-    assert(this->data.size() == std::accumulate(this->shape.begin(),
-           this->shape.end(),
-           1, std::multiplies<int>()));
+    :   requires_grad(requires_grad) {
+    // Check if data size matches shape
+    assert(data.size() == std::accumulate(shape.begin(),
+           shape.end(), 1, std::multiplies<int>()));
     // Initialize devices, switch current device
     switch_device_to(device_name);
 
+    std::string _dtype = dtype;
     // infer dtype if none
     {
-        this->dtype = dtype;
-        if (dtype == "none") {
+        if (_dtype == "none") {
             if (std::is_same<T, int>::value ||
                 std::is_same<T, long>:: value ||
                 std::is_same<T, long long>::value)
-                this->dtype = "i" + std::to_string(sizeof(T)*8);
+                _dtype = "i" + std::to_string(sizeof(T)*8);
             else if (std::is_same<T, float>::value ||
                         std::is_same<T, double>::value)
-                this->dtype = "f" + std::to_string(sizeof(T)*8);
+                _dtype = "f" + std::to_string(sizeof(T)*8);
             else if (std::is_same<T, bool>::value)
-                this->dtype = "b" + std::to_string(sizeof(T)*8);
+                _dtype = "b" + std::to_string(sizeof(T)*8);
         }
-        if (this->dtype == "none") throw std::runtime_error("dtype not implemented");
+        if (_dtype == "none") throw std::runtime_error("dtype not implemented");
     }
 
     // Housekeeping
     {
-        this->tuid = this->dtype +
+        context->dtype = _dtype;
+        context->tuid = _dtype +
             "_" + std::to_string(global_tensor_count) +
             "_" + "Tensor";
+
         global_tensor_count++;
         // Offer ownership to global tensor map
-        global_tensor_map<T>[this->tuid].reset(std::move(this));
+        global_tensor_map<T>[this->tuid()].reset(std::move(this));
+
+        // Create new context, move ownership of important vectors.
+        context.reset(new TensorPassingContext());
+        context->shape = shape;
+        // Default strides
+        context->strides = std::vector<int>(shape.size(), 1);
+
+        auto* raw_data = data.data();
+        size_t bytes = data.size() * sizeof(T);
+        context->data = std::vector<uint8_t>(bytes);
+        std::memcpy(context->data.data(), raw_data, bytes);
     }
 }
 
@@ -69,7 +80,7 @@ tensorlib::Tensor<T>::Tensor(Tensor& other) {
 // Release from unique_ptr if being destroyed
 template <typename T>
 tensorlib::Tensor<T>::~Tensor() {
-    global_tensor_map<T>[this->tuid].release();
+    global_tensor_map<T>[this->tuid()].release();
 }
 
 /* ----------------------
@@ -79,17 +90,17 @@ tensorlib::Tensor<T>::~Tensor() {
 // Code common to all binary operations.
 // Shape conformity, new shape calculation, etc. handled here.
 template <typename T>
-inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
+inline Tensor<T> tensorlib::Tensor<T>::binop_boilerplate(
         Tensor<T>& a,
         Tensor<T>& b,
         const std::string& op_name) {
 
     // Tensor for storing results
     Tensor<T> result = Tensor<T>(
-        std::vector<T>(a.data.size()),
-        std::vector<int>(a.shape),
-        a.requires_grad, a.dtype, "cpu");
-    result.parents = {a.tuid, b.tuid};
+        std::vector<T>(a.data().size()),
+        std::vector<int>(a.shape()),
+        a.requires_grad, a.dtype(), "cpu");
+    result.parents = {a.tuid(), b.tuid()};
     result.realized = true;
     // If either tensor is on GPU, run the calculation on GPU
     if (a.device->name() == "gpu" || b.device->name() == "gpu") {
@@ -101,11 +112,11 @@ inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
         result.realized = false;
         try {
 #ifdef RUN_METAL
-            device->get()->enqueue_kernel({a.tuid, b.tuid},
+            device->get()->enqueue_kernel({a.tuid(), b.tuid()},
                     // Trying to follow a naming convention
                     // with the kernel names. The "_v_" is meant
                     // to indicate vector
-                    result.tuid, op_name + "_v_" + dtype);
+                    result.tuid(), op_name + "_v_" + this->dtype());
 #else
             throw std::runtime_error("device not enabled");
 #endif
@@ -122,7 +133,7 @@ inline Tensor<T> tensorlib::Tensor<T>::__binop_boilerplate(
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
-    Tensor<T> result = __binop_boilerplate(*this, other, "add");
+    Tensor<T> result = binop_boilerplate(*this, other, "add");
     // If device is not cpu, assume execution handled
     if (device->name() != "cpu") return result;
     // CPU default implementation
@@ -134,7 +145,7 @@ Tensor<T> tensorlib::Tensor<T>::operator+(Tensor& other) {
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator-(Tensor& other) {
-    Tensor<T> result = __binop_boilerplate(*this, other, "sub");
+    Tensor<T> result = binop_boilerplate(*this, other, "sub");
     if (device->name() != "cpu") return result;
     // CPU default implementation
     for (int i = 0; i < data.size(); ++i) {
@@ -145,7 +156,7 @@ Tensor<T> tensorlib::Tensor<T>::operator-(Tensor& other) {
 
 template <typename T>
 Tensor<T> tensorlib::Tensor<T>::operator*(Tensor& other) {
-    Tensor<T> result = __binop_boilerplate(*this, other, "mul");
+    Tensor<T> result = binop_boilerplate(*this, other, "mul");
     // CPU default implementation
     for (int i = 0; i < data.size(); ++i) {
         result.data[i] = this->data[i] * other.data[i];
@@ -181,7 +192,7 @@ void tensorlib::Tensor<T>::to(const std::string& device_name) {
         try {
 #ifdef RUN_METAL
             auto new_device = device_interfaces[device_name];
-            new_device->get()->assign(this->tuid, get_raw_data_ptr(), get_mem_size());
+            new_device->get()->assign(this->tuid(), get_raw_data_ptr(), get_mem_size());
 #else
             throw std::runtime_error("device not enabled");
 #endif
@@ -201,7 +212,7 @@ void tensorlib::Tensor<T>::to(const std::string& device_name) {
         }
 #ifdef RUN_METAL
         // Copy memory into data vector
-        device->get()->copy_to_host(this->tuid, get_raw_data_ptr(), get_mem_size());
+        device->get()->copy_to_host(this->tuid(), get_raw_data_ptr(), get_mem_size());
 #endif
     }
     switch_device_to(device_name);
@@ -215,7 +226,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
         // and buffer the calculations.
         // NOTE: Currently if not realized on CPU, it is an error
         throw std::runtime_error(
-            "Tensor " + tuid + " not realized, \
+            "Tensor " + this->tuid() + " not realized, \
             graph construction error."
         );
     }
@@ -223,7 +234,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
     this->to(device->name());
     // Check if parents are realized.
     bool parents_realized = true;
-    for (auto& parent : parents) {
+    for (auto& parent : context.parents) {
         // Parents are tuids, get tensor ptr from global map
         auto& pt = global_tensor_map<T>[parent];
         if (pt->realized == false) {
@@ -265,7 +276,7 @@ void tensorlib::Tensor<T>::realize(bool force) {
                     }
                     // Check if parents are realized.
                     bool parents_realized = true;
-                    for (auto& parent : tensor_ptr->parents) {
+                    for (auto& parent : tensor_ptr->context.parents) {
                         auto& parent_pt = global_tensor_map<T>[parent];
                         if (parent_pt->realized == false) {
                             parents_realized = false;
@@ -286,25 +297,24 @@ void tensorlib::Tensor<T>::realize(bool force) {
             }
         };
         std::vector<std::thread> threads(NTHREADS);
-        for (int t = 0; t < NTHREADS; ++t) {
-            threads.push_back(std::thread(tree_search, this->tuid));
-        }
-        for (auto& thread : threads) {
+        for (int t = 0; t < NTHREADS; ++t)
+            threads.push_back(std::thread(tree_search, this->tuid()));
+
+        for (auto& thread : threads)
             if (thread.joinable())
                 thread.join();
-        }
     } else {
         // Realize self -
         // schedule realize on gpu as soon as you find a candidate,
         // but don't block the thread on it.
 #ifdef RUN_METAL
-        switch (device->get()->get_cmdbuf_status(this->tuid)) {
+        switch (device->get()->get_cmdbuf_status(this->tuid())) {
             case 1:
-                device->get()->schedule_realize(this->tuid);
+                device->get()->schedule_realize(this->tuid());
                 this->queued_realization = true;
                 // Wait the thread for realization if forced
                 if (force == true) {
-                    device->get()->wait_for(this->tuid);
+                    device->get()->wait_for(this->tuid());
                     this->realized = true;
                 }
                 break;

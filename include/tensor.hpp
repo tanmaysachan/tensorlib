@@ -16,21 +16,23 @@ namespace tensorlib {
 
 template <typename T>
 class Tensor {
-    std::vector<int> strides;
-    std::vector<T> grad;
-    std::function<T(T)> grad_fn;
-    std::vector<std::string> parents;
+    /* std::vector<int> strides; */
+    /* std::vector<T> grad; */
+    /* std::function<T(T)> grad_fn; */
+    /* std::vector<std::string> parents; */
 
     // UNSAFE
     void* get_raw_data_ptr();
 public:
-    std::vector<T> data;
-    std::vector<int> shape;
-    std::string dtype;
+    /* std::vector<T> data; */
+    /* std::vector<int> shape; */
+    /* std::string dtype; */
+
     Device* device;
+    std::unique_ptr<TensorPassingContext> context;
 
     // tensor unique id
-    std::string tuid;
+    /* std::string tuid; */
     bool requires_grad;
 
     // By default user-created tensors are fully "realized", i.e.
@@ -59,17 +61,29 @@ public:
     /* TODO: to be used for testing only right now. Equality checks on tensor
      * would be much more complicated than this. */
     friend bool operator==(const Tensor<T>& a, const Tensor<T>& b) {
-        return a.data == b.data && a.shape == b.shape && a.dtype == b.dtype;
+        return a.data() == b.data() && a.shape() == b.shape() && a.dtype() == b.dtype();
     }
 
+    /* getters */
+    const std::vector<T>& data() const {
+        // Convert a vector of bytes to a vector of T
+        return *reinterpret_cast<std::vector<T>*>(context->data.data());
+    }
+    const std::string& tuid() const { return context->tuid; }
+    const std::string& dtype() const { return context->dtype; }
+    const std::vector<int>& shape() const { return context->shape; }
+    const std::vector<int>& strides() const { return context->strides; }
+
     /* Tensor ops */
-    inline Tensor<T> __unaryop_boilerplate(
+    // boilerplates
+    inline Tensor<T> unaryop_boilerplate(
             Tensor<T>& a,
             const std::string& op_name);
-    inline Tensor<T> __binop_boilerplate(
+    inline Tensor<T> binop_boilerplate(
             Tensor<T>& a,
             Tensor<T>& b,
             const std::string& op_name);
+
     Tensor<T> operator+(Tensor<T>& other);
     Tensor<T> operator-(Tensor<T>& other);
     Tensor<T> operator*(Tensor<T>& other);
