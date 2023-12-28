@@ -17,12 +17,12 @@ static TensorPassingContext init_context(
     size_t num_elements,
     const std::string& device_name) {
 
+    // TODO: Dtype handling should be here
     TensorPassingContext context;
 
-    // Assign dtype and name
-    context.tuid = std::to_string(global_tensor_count++)
+    // Assign name, increment count
+    context.tuid = std::to_string(global_tensor_count)
                     + "_" + "Tensor";
-
     global_tensor_count++;
 
     context.shape = shape;
