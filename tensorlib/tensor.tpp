@@ -19,12 +19,7 @@ static TensorPassingContext init_context(
 
     TensorPassingContext context;
 
-    // Check if data size matches shape
-    /* assert(num_elements == std::accumulate(shape.begin(), */
-    /*        shape.end(), 1, std::multiplies<int>())); */
-
     // Assign dtype and name
-    context.dtype = DType(dtype);
     context.tuid = std::to_string(global_tensor_count++)
                     + "_" + "Tensor";
 
@@ -44,6 +39,27 @@ static TensorPassingContext init_context(
 }
 
 template <typename T>
+DType Tensor::infer_dtype(const std::string& dtype) {
+    if (dtypes_map.find(dtype) != dtypes_map.end()) {
+        return dtypes_map[dtype];
+    }
+    size_t size = sizeof(T) * 8;
+    Primitive type;
+    std::string repr;
+    if (std::is_same<T, int>::value ||
+        std::is_same<T, long>:: value ||
+        std::is_same<T, long long>::value) {
+        type = Primitive::Int;
+    } else if (std::is_same<T, float>::value ||
+             std::is_same<T, double>::value) {
+        type = Primitive::Float;
+    } else {
+        throw std::runtime_error("Unsupported dtype");
+    }
+    return DType(type, size);
+}
+
+template <typename T>
 tensorlib::Tensor::Tensor(
     std::vector<T>const& data,
     std::vector<int>const& shape,
@@ -55,28 +71,8 @@ tensorlib::Tensor::Tensor(
                 shape, dtype, sizeof(T), data.size(),
                 device_name)) {
 
-    // Infer dtype if none
-    if (context.dtype.type == DType::Type::None) {
-        context.dtype.size = sizeof(T) * 8;
-        if (std::is_same<T, int>::value ||
-            std::is_same<T, long>:: value ||
-            std::is_same<T, long long>::value) {
-            context.dtype.type = DType::Type::Int;
-            context.dtype.repr = "i" + std::to_string(context.dtype.size);
-            context.dtype.bytes = sizeof(T);
-        }
-        else if (std::is_same<T, float>::value ||
-                    std::is_same<T, double>::value) {
-            context.dtype.type = DType::Type::Float;
-            context.dtype.repr = "f" + std::to_string(context.dtype.size);
-            context.dtype.bytes = sizeof(T);
-        }
-        else if (std::is_same<T, bool>::value) {
-            context.dtype.type = DType::Type::Bool;
-            context.dtype.repr = "b";
-            context.dtype.bytes = sizeof(T);
-        }
-    }
+    // Dtype initialized separately from context
+    context.dtype = infer_dtype<T>(dtype);
 
     // Offer ownership to global tensor map
     global_tensor_map[context.tuid].reset(std::move(this));

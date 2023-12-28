@@ -23,6 +23,9 @@ class Tensor {
             size_t dtype_size_in_bytes,
             size_t num_elements,
             const std::string& device_name);
+
+    template <typename T>
+    DType infer_dtype(const std::string& input_dtype);
 public:
     TensorPassingContext context;
 
